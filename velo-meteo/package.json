@@ -1,6 +1,6 @@
 {
   "name": "velo-meteo",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Velo Meteo - Home Assistant Add-on - meteo du trajet velotaf",
   "main": "server.js",
   "scripts": { "start": "node server.js" },

@@ -164,6 +164,13 @@ svg.chart,svg.map{display:block;width:100%;height:auto}
 }
 .slider-rate.t2,.slider-rate.t3,.slider-rate.t4{background:var(--rain-3);color:#fff}
 .slider-rate.t1{background:var(--rain-1);color:var(--text)}
+/* Vue d'ensemble : elle melange plusieurs heures, donc pas un cran du curseur. */
+.chip-toggle{
+  display:inline-flex;align-items:center;gap:6px;margin:2px 0 6px;
+  font-size:12px;font-weight:700;padding:7px 12px;border-radius:999px;
+  background:var(--surface-2);color:var(--text-dim);border:1px solid var(--line)
+}
+.chip-toggle[aria-pressed=true]{background:var(--accent);color:#fff;border-color:transparent}
 
 /* Fond de carte : tuiles OSM posees en absolu, tracé en SVG par-dessus.
    La hauteur est fixée en JS, une fois la largeur réelle connue. */

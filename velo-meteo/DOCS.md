@@ -152,13 +152,17 @@ les chiffres, eux, ne bougent pas.
 
 ### Le curseur de parcours
 
-Sous la carte, un curseur déplace un point le long du trajet.
+Sous la carte, un curseur déplace un point le long du trajet. Il est **purement
+temporel** : un cran par point de passage, du départ à l'arrivée. Le marqueur se pose sur
+le point et toute la carte bascule sur **l'heure où tu y seras**. On voit ainsi l'averse
+arriver ou s'éloigner au fil du parcours ; le libellé donne l'heure, le lieu et
+l'intensité à cet endroit.
 
-- **Cran 0 — vue d'ensemble** : chaque case de la grille à l'heure du point de passage le
-  plus proche. C'est la lecture « où vais-je me faire saucer sur tout le trajet ».
-- **Crans suivants** : un par point de passage. Le marqueur se pose dessus et toute la
-  carte bascule sur **l'heure où tu y seras**. On voit ainsi l'averse arriver ou s'éloigner
-  au fil du parcours. Le libellé donne l'heure, le lieu et l'intensité à cet endroit.
+Le bouton **Vue d'ensemble du trajet**, juste dessous, montre autre chose : chaque case de
+la grille à l'heure du point de passage le plus proche, soit « où vais-je me faire saucer
+sur *tout* le trajet ». Ce n'est pas un instant — l'image mélange plusieurs heures — d'où
+son bouton séparé plutôt qu'un cran du curseur, et l'absence de marqueur. Toucher le
+curseur y met fin.
 
 Les images arrivent toutes dans la même réponse — une par point de passage — donc changer
 de cran ne déclenche aucune requête : seul le calque SVG est réécrit, les tuiles restent

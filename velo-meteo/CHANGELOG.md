@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.1 — Le curseur ne montre plus que des instants
+
+Le cran 0 du curseur affichait la vue d'ensemble, qui superpose plusieurs heures sur une
+même image : la mêler aux crans temporels prêtait à confusion. Le curseur est maintenant
+purement temporel — **cran 0 = l'heure de départ**, dernier cran = l'arrivée — et la vue
+d'ensemble a son propre bouton sous le curseur.
+
+- Toucher le curseur quitte la vue d'ensemble : demander un cran, c'est demander un instant.
+- Pas de marqueur en vue d'ensemble : elle ne correspond à aucun instant, donc à aucune
+  position précise sur le trajet.
+
 ## 0.5.0 — Curseur de parcours
 
 Un curseur sous la carte déplace un point le long du trajet. À chaque cran, le marqueur
@@ -7,10 +18,10 @@ se pose sur le point de passage et **les nuages basculent sur l'heure de passage
 point** : on voit l'averse arriver ou s'éloigner au fil du trajet, au lieu d'une seule
 image figée.
 
-- Cran 0 = **vue d'ensemble**, la lecture d'avant : chaque case de la grille à l'heure du
-  point de passage le plus proche, soit « où vais-je me faire saucer sur tout le trajet ».
-  Les crans suivants répondent à l'autre question : à quoi ressemble le ciel à cet instant.
 - Le libellé donne l'heure, le lieu et l'intensité au point choisi.
+- La **vue d'ensemble** reste accessible à côté (voir 0.5.1) : chaque case de la grille à
+  l'heure du point de passage le plus proche, soit « où vais-je me faire saucer sur tout
+  le trajet ».
 - Les images de pluie arrivent **toutes dans la même réponse** (une image par point de
   passage) : passer d'un cran à l'autre ne déclenche aucune requête, et seul le calque
   SVG est réécrit — les tuiles ne sont pas rechargées.

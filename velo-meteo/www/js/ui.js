@@ -189,12 +189,18 @@
   // Champ de pluie autour du trajet (grille Open-Meteo), renseigné par app.js.
   var field = { available: false, cells: [] };
 
-  // Image affichée : null = vue d'ensemble, sinon le rang du point de passage
-  // choisi au curseur.
-  var frame = null;
+  // Rang du point de passage choisi au curseur. Le curseur est purement
+  // temporel : cran 0 = l'heure de départ, dernier cran = l'arrivée.
+  var frame = 0;
+
+  // La vue d'ensemble (chaque case à l'heure du point le plus proche) n'est pas
+  // un instant : elle mélange plusieurs heures sur une même image. La mêler aux
+  // crans du curseur prêtait à confusion, elle a son propre bouton.
+  var overviewOn = false;
 
   function setField(data) { field = data || { available: false, cells: [] }; }
-  function setFrame(i) { frame = (i === null || i === undefined) ? null : +i; }
+  function setFrame(i) { frame = Math.max(0, +i || 0); }
+  function setOverview(on) { overviewOn = !!on; }
 
   function lonToWorld(lon, z) {
     return ((lon + 180) / 360) * TILE_SIZE * Math.pow(2, z);
@@ -368,7 +374,7 @@
 
     var cells = null;
     if (field.available) {
-      if (frame === null) cells = field.cells;
+      if (overviewOn) cells = field.cells;
       else if (field.frames && field.frames[frame] && field.frames[frame].found !== false) {
         cells = field.frames[frame].rates.map(function (rate, j) {
           return { lat: field.cells[j].lat, lon: field.cells[j].lon, rate: rate };
@@ -383,7 +389,9 @@
       rain = fieldSvg(cells, v.px, Math.max(8, spacing));
     }
 
-    return overlaySvg(v.W, v.H, v.coords, v.points, v.cells, rain, frame);
+    // Pas de marqueur en vue d'ensemble : elle ne correspond à aucun instant,
+    // donc à aucune position précise sur le trajet.
+    return overlaySvg(v.W, v.H, v.coords, v.points, v.cells, rain, overviewOn ? null : frame);
   }
 
   /** Redessine le calque de chaque carte affichée, sans retoucher aux tuiles. */
@@ -411,14 +419,31 @@
 
     // Le curseur ne redessine que le calque SVG : passer d'un cran à l'autre
     // ne doit ni recharger les tuiles ni refaire le rendu de la page.
-    Array.prototype.forEach.call(scope.querySelectorAll('[data-slider] input'), function (input) {
-      input.addEventListener('input', function () {
-        var v = +input.value;
-        setFrame(v === 0 ? null : v - 1);
+    Array.prototype.forEach.call(scope.querySelectorAll('[data-slider]'), function (box) {
+      var input = box.querySelector('input[type=range]');
+      var btn = box.querySelector('[data-overview]');
+      var lbl = box.querySelector('[data-slider-label]');
+
+      var refresh = function () {
         redrawLayers(scope);
-        var lbl = input.parentNode.querySelector('[data-slider-label]');
         if (lbl && route) lbl.innerHTML = sliderLabel(route);
-      });
+        if (btn) btn.setAttribute('aria-pressed', String(overviewOn));
+      };
+
+      if (input) {
+        input.addEventListener('input', function () {
+          setFrame(input.value);
+          setOverview(false);   // toucher le curseur, c'est demander un instant
+          refresh();
+        });
+      }
+
+      if (btn) {
+        btn.addEventListener('click', function () {
+          setOverview(!overviewOn);
+          refresh();
+        });
+      }
     });
   }
 
@@ -456,32 +481,33 @@
   }
 
   /**
-   * Curseur de parcours : cran 0 = vue d'ensemble, crans suivants = les points
-   * de passage. Chaque cran repositionne le marqueur sur la carte et bascule
-   * les nuages sur l'heure de passage de ce point.
+   * Curseur de parcours, purement temporel : un cran par point de passage, du
+   * départ à l'arrivée. Chaque cran pose le marqueur sur le point et bascule
+   * les nuages sur l'heure de passage — le ciel à cet instant, rien d'autre.
    *
-   * Le cran « vue d'ensemble » est gardé en tête parce que c'est la lecture
-   * utile avant de partir : où vais-je prendre l'averse *sur tout le trajet*.
-   * Les crans suivants répondent à une autre question : à quoi ressemble le
-   * ciel à cet instant précis.
+   * La vue d'ensemble, elle, superpose plusieurs heures sur une même image :
+   * en faire un cran du curseur prêtait à confusion, d'où son bouton séparé.
    */
   function timeSlider(route) {
     var pts = route.points || [];
     if (!field.available || !field.frames || field.frames.length !== pts.length || pts.length < 2) return '';
 
     return '<div class="mapslider" data-slider>' +
-      '<input type="range" min="0" max="' + pts.length + '" step="1" ' +
-        'value="' + (frame === null ? 0 : frame + 1) + '" ' +
-        'aria-label="Point du trajet">' +
+      '<input type="range" min="0" max="' + (pts.length - 1) + '" step="1" ' +
+        'value="' + Math.min(frame, pts.length - 1) + '" ' +
+        'aria-label="Heure de passage sur le trajet">' +
       '<div class="slider-lbl" data-slider-label>' + sliderLabel(route) + '</div>' +
+      '<button class="chip-toggle" data-overview aria-pressed="' + overviewOn + '">' +
+        '🗺️ Vue d’ensemble du trajet</button>' +
     '</div>';
   }
 
   /** Ce que dit le curseur à sa position courante. */
   function sliderLabel(route) {
     var pts = route.points || [];
-    if (frame === null) {
-      return '<b>Tout le trajet</b><span class="muted"> · pluie à l’heure de passage de chaque point</span>';
+    if (overviewOn) {
+      return '<b>Tout le trajet</b>' +
+        '<span class="muted"> · chaque endroit à l’heure où tu y passes</span>';
     }
     var p = pts[frame] || {};
     var f = field.frames[frame] || {};
@@ -574,6 +600,6 @@
     esc: esc, num: num, rainColor: rainColor, rainTier: rainTier, verdictOf: verdictOf,
     verdictCard: verdictCard, profileStrip: profileStrip, windCard: windCard,
     rainChart: rainChart, radarMap: radarMap, mountMaps: mountMaps, routeSummary: routeSummary,
-    setField: setField, setFrame: setFrame
+    setField: setField, setFrame: setFrame, setOverview: setOverview
   };
 })(window, document);

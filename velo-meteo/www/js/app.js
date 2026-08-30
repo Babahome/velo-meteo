@@ -96,7 +96,9 @@
     return api.field(currentTrip()).then(function (f) {
       state.field = f || { available: false, cells: [] };
       UI.setField(state.field);
-      UI.setFrame(null);   // les images ont changé : retour à la vue d'ensemble
+      // Les images ont changé : le curseur repart au départ du trajet.
+      UI.setFrame(0);
+      UI.setOverview(false);
       return state.field;
     });
   }
@@ -486,7 +488,7 @@
         '<section class="card">' +
           '<div class="card-pad">' +
             '<div class="card-title">État</div>' +
-            '<div class="small muted">Version 0.5.0 · ' +
+            '<div class="small muted">Version 0.5.1 · ' +
               (state.config.configured ? 'trajet réel configuré' : 'aucun trajet : données fictives') +
               (state.offline ? ' · API injoignable' : '') + '.</div>' +
           '</div>' +
