@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.5.0 — Curseur de parcours
+
+Un curseur sous la carte déplace un point le long du trajet. À chaque cran, le marqueur
+se pose sur le point de passage et **les nuages basculent sur l'heure de passage de ce
+point** : on voit l'averse arriver ou s'éloigner au fil du trajet, au lieu d'une seule
+image figée.
+
+- Cran 0 = **vue d'ensemble**, la lecture d'avant : chaque case de la grille à l'heure du
+  point de passage le plus proche, soit « où vais-je me faire saucer sur tout le trajet ».
+  Les crans suivants répondent à l'autre question : à quoi ressemble le ciel à cet instant.
+- Le libellé donne l'heure, le lieu et l'intensité au point choisi.
+- Les images de pluie arrivent **toutes dans la même réponse** (une image par point de
+  passage) : passer d'un cran à l'autre ne déclenche aucune requête, et seul le calque
+  SVG est réécrit — les tuiles ne sont pas rechargées.
+- Une heure de passage hors fenêtre de prévision affiche « pas de prévision » plutôt
+  qu'un ciel sec, qui serait faux.
+- L'averse simulée **traverse** désormais la carte au fil des images : un nuage immobile
+  ne dirait pas si le curseur change vraiment d'heure.
+
 ## 0.4.0 — Nuages de pluie, carte d'abord, nom du GPX
 
 - **Nuages de précipitations sur la carte**, à l'heure de passage. Une grille de ~900 m

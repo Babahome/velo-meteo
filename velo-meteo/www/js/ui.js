@@ -189,7 +189,12 @@
   // Champ de pluie autour du trajet (grille Open-Meteo), renseigné par app.js.
   var field = { available: false, cells: [] };
 
+  // Image affichée : null = vue d'ensemble, sinon le rang du point de passage
+  // choisi au curseur.
+  var frame = null;
+
   function setField(data) { field = data || { available: false, cells: [] }; }
+  function setFrame(i) { frame = (i === null || i === undefined) ? null : +i; }
 
   function lonToWorld(lon, z) {
     return ((lon + 180) / 360) * TILE_SIZE * Math.pow(2, z);
@@ -256,12 +261,23 @@
   }
 
   /** Le calque nuages + tracé + marqueurs, en pixels de la carte. */
-  function overlaySvg(W, H, pxCoords, pxPoints, cells, rain) {
+  function overlaySvg(W, H, pxCoords, pxPoints, cells, rain, cursor) {
     var d = pxCoords.map(function (p, i) {
       return (i === 0 ? 'M' : 'L') + p[0].toFixed(1) + ' ' + p[1].toFixed(1);
     }).join(' ');
 
     var a = pxPoints[0], b = pxPoints[pxPoints.length - 1];
+
+    // Point sélectionné par le curseur : plus gros que les marqueurs de départ
+    // et d'arrivée, pour rester repérable même posé juste à côté de l'un d'eux.
+    var mark = '';
+    if (cursor !== null && cursor !== undefined && pxPoints[cursor]) {
+      var c = pxPoints[cursor];
+      mark = '<circle cx="' + c[0].toFixed(1) + '" cy="' + c[1].toFixed(1) +
+        '" r="12" fill="var(--accent)" opacity=".25"/>' +
+        '<circle cx="' + c[0].toFixed(1) + '" cy="' + c[1].toFixed(1) +
+        '" r="6.5" fill="#fff" stroke="var(--accent)" stroke-width="4"/>';
+    }
 
     var cellSvg = cells.map(function (c, i) {
       return '<circle cx="' + (c.x * W).toFixed(1) + '" cy="' + (c.y * H).toFixed(1) +
@@ -275,6 +291,7 @@
       '<path d="' + d + '" fill="none" stroke="var(--accent)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>' +
       '<circle cx="' + a[0].toFixed(1) + '" cy="' + a[1].toFixed(1) + '" r="7" fill="#fff" stroke="var(--accent)" stroke-width="3"/>' +
       '<circle cx="' + b[0].toFixed(1) + '" cy="' + b[1].toFixed(1) + '" r="7" fill="var(--accent)" stroke="#fff" stroke-width="3"/>' +
+      mark +
     '</svg>';
   }
 
@@ -315,16 +332,16 @@
       }
     }
 
-    // Pas de la grille de pluie, converti en pixels au zoom courant.
-    var rain = '';
-    if (field.available && field.cells && field.cells.length) {
-      var c0 = field.cells[0];
-      var spacing = Math.abs(latToWorld(c0.lat + field.step_lat, z) - latToWorld(c0.lat, z));
-      rain = fieldSvg(field.cells, px, Math.max(8, spacing));
-    }
-
-    el.innerHTML = tiles +
-      overlaySvg(W, H, data.coords.map(px), data.points.map(px), data.cells, rain);
+    // Les tuiles ne bougent plus ; seul le calque SVG est réécrit quand le
+    // curseur change d'heure, sinon chaque cran rechargerait la carte entière.
+    el._vm = {
+      W: W, H: H, z: z, px: px,
+      coords: data.coords.map(px),
+      points: data.points.map(px),
+      cells: data.cells,
+      tiles: tiles
+    };
+    el.innerHTML = tiles + layerFor(el);
 
     // Sans accès Internet (Home Assistant isolé, avion, etc.) aucune tuile ne
     // charge : on bascule sur le fond neutre plutôt que sur un cadre blanc.
@@ -341,9 +358,48 @@
     });
   }
 
-  /** À appeler après chaque innerHTML : les cartes ne peuvent se calculer qu'insérées. */
-  function mountMaps(root) {
+  /**
+   * Calque SVG de la carte : nuages de l'image courante, tracé, marqueurs.
+   * `frame` vaut null pour la vue d'ensemble, sinon le rang du point de passage.
+   */
+  function layerFor(el) {
+    var v = el._vm;
+    if (!v) return '';
+
+    var cells = null;
+    if (field.available) {
+      if (frame === null) cells = field.cells;
+      else if (field.frames && field.frames[frame] && field.frames[frame].found !== false) {
+        cells = field.frames[frame].rates.map(function (rate, j) {
+          return { lat: field.cells[j].lat, lon: field.cells[j].lon, rate: rate };
+        });
+      }
+    }
+
+    var rain = '';
+    if (cells && cells.length) {
+      // Pas de la grille converti en pixels au zoom courant.
+      var spacing = Math.abs(latToWorld(cells[0].lat + field.step_lat, v.z) - latToWorld(cells[0].lat, v.z));
+      rain = fieldSvg(cells, v.px, Math.max(8, spacing));
+    }
+
+    return overlaySvg(v.W, v.H, v.coords, v.points, v.cells, rain, frame);
+  }
+
+  /** Redessine le calque de chaque carte affichée, sans retoucher aux tuiles. */
+  function redrawLayers(root) {
     Array.prototype.forEach.call((root || d).querySelectorAll('.mapcanvas[data-map]'), function (el) {
+      if (!el._vm) return;
+      var svg = el.querySelector('.maplayer');
+      if (svg) svg.outerHTML = layerFor(el);
+    });
+  }
+
+  /** À appeler après chaque innerHTML : les cartes ne peuvent se calculer qu'insérées. */
+  function mountMaps(root, route) {
+    var scope = root || d;
+
+    Array.prototype.forEach.call(scope.querySelectorAll('.mapcanvas[data-map]'), function (el) {
       mountMap(el);
       // Le layout C range la carte dans un <details> replié (largeur 0) et
       // l'orientation du téléphone change la largeur : on remonte à chaque fois.
@@ -351,6 +407,18 @@
         el._ro = new w.ResizeObserver(function () { mountMap(el); });
         el._ro.observe(el);
       }
+    });
+
+    // Le curseur ne redessine que le calque SVG : passer d'un cran à l'autre
+    // ne doit ni recharger les tuiles ni refaire le rendu de la page.
+    Array.prototype.forEach.call(scope.querySelectorAll('[data-slider] input'), function (input) {
+      input.addEventListener('input', function () {
+        var v = +input.value;
+        setFrame(v === 0 ? null : v - 1);
+        redrawLayers(scope);
+        var lbl = input.parentNode.querySelector('[data-slider-label]');
+        if (lbl && route) lbl.innerHTML = sliderLabel(route);
+      });
     });
   }
 
@@ -367,6 +435,7 @@
 
     var id = 'map' + (++mapSeq);
     maps[id] = { coords: coords, points: pts, cells: cells };
+    sliderPoints = pts;
 
     var caption = (route.track_ll ? 'Tracé réel' : 'Points de passage') +
       ' · fond de carte © OpenStreetMap';
@@ -374,16 +443,85 @@
     // Les nuages valent pour l'heure de passage, pas pour maintenant : c'est
     // toute la différence avec une image radar, et ça doit se lire.
     if (field.source === 'demo') caption += ' · ☔ averse simulée (test)';
-    else if (field.available) caption += ' · nuages de pluie à l’heure de passage';
+    else if (field.available) caption += ' · nuages de pluie Open-Meteo';
 
     return '' +
       '<section class="card mapwrap">' +
         '<div class="mapcanvas" data-map="' + id + '"></div>' +
+        timeSlider(route) +
         // En surimpression, l'étiquette masquait le marqueur quand le trajet
         // arrivait dans ce coin : elle est sous la carte.
         '<div class="mapfoot">' + esc(caption) + '</div>' +
       '</section>';
   }
+
+  /**
+   * Curseur de parcours : cran 0 = vue d'ensemble, crans suivants = les points
+   * de passage. Chaque cran repositionne le marqueur sur la carte et bascule
+   * les nuages sur l'heure de passage de ce point.
+   *
+   * Le cran « vue d'ensemble » est gardé en tête parce que c'est la lecture
+   * utile avant de partir : où vais-je prendre l'averse *sur tout le trajet*.
+   * Les crans suivants répondent à une autre question : à quoi ressemble le
+   * ciel à cet instant précis.
+   */
+  function timeSlider(route) {
+    var pts = route.points || [];
+    if (!field.available || !field.frames || field.frames.length !== pts.length || pts.length < 2) return '';
+
+    return '<div class="mapslider" data-slider>' +
+      '<input type="range" min="0" max="' + pts.length + '" step="1" ' +
+        'value="' + (frame === null ? 0 : frame + 1) + '" ' +
+        'aria-label="Point du trajet">' +
+      '<div class="slider-lbl" data-slider-label>' + sliderLabel(route) + '</div>' +
+    '</div>';
+  }
+
+  /** Ce que dit le curseur à sa position courante. */
+  function sliderLabel(route) {
+    var pts = route.points || [];
+    if (frame === null) {
+      return '<b>Tout le trajet</b><span class="muted"> · pluie à l’heure de passage de chaque point</span>';
+    }
+    var p = pts[frame] || {};
+    var f = field.frames[frame] || {};
+    var head = '<b>' + esc(f.time || p.time || '') + '</b>' +
+      '<span class="muted"> · ' + esc(p.label || ('point ' + (frame + 1))) + '</span>';
+
+    // Un départ au-delà de la fenêtre de prévision n'a pas d'image : le dire,
+    // plutôt que d'afficher un ciel sec qui serait faux.
+    if (f.found === false) {
+      return head + '<span class="slider-rate">pas de prévision</span>';
+    }
+
+    var rate = onRoute(frame);
+    return head + '<span class="slider-rate t' + rainTier(rate) + '">' +
+      (rate >= 0.1 ? num(rate) + ' mm/h' : 'sec') + '</span>';
+  }
+
+  /** Intensité de l'image `i` à l'endroit où se trouve le vélo à ce moment-là. */
+  function onRoute(i) {
+    var f = field.frames && field.frames[i];
+    if (!f || !field.cells || !field.cells.length) return 0;
+    return f.rates[nearestCell(i)] || 0;
+  }
+
+  /** Case de la grille la plus proche du point de passage `i`. */
+  function nearestCell(i) {
+    var pt = sliderPoints[i];
+    if (!pt) return 0;
+    var best = 0, bestD = Infinity;
+    field.cells.forEach(function (c, j) {
+      var dLat = c.lat - pt[0], dLon = c.lon - pt[1];
+      var dd = dLat * dLat + dLon * dLon;
+      if (dd < bestD) { bestD = dd; best = j; }
+    });
+    return best;
+  }
+
+  // Coordonnées des points de passage du trajet affiché, pour situer le
+  // curseur dans la grille de pluie.
+  var sliderPoints = [];
 
   /** Repli sans coordonnées : la grille schématique de la V1. */
   function schematicMap(route) {
@@ -436,6 +574,6 @@
     esc: esc, num: num, rainColor: rainColor, rainTier: rainTier, verdictOf: verdictOf,
     verdictCard: verdictCard, profileStrip: profileStrip, windCard: windCard,
     rainChart: rainChart, radarMap: radarMap, mountMaps: mountMaps, routeSummary: routeSummary,
-    setField: setField
+    setField: setField, setFrame: setFrame
   };
 })(window, document);

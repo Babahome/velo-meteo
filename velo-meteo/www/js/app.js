@@ -96,6 +96,7 @@
     return api.field(currentTrip()).then(function (f) {
       state.field = f || { available: false, cells: [] };
       UI.setField(state.field);
+      UI.setFrame(null);   // les images ont changé : retour à la vue d'ensemble
       return state.field;
     });
   }
@@ -104,6 +105,10 @@
 
   var view = d.getElementById('view');
   var topbar = d.getElementById('topbar');
+
+  // Trajet affiché par la page en cours : le curseur de la carte y lit le nom
+  // et l'heure de chaque point de passage.
+  var shownRoute = null;
 
   /** Bandeau d'origine des données, en haut de chaque page. */
   function sourceBar(forDate) {
@@ -156,6 +161,7 @@
     setSwitch(true);
     return Promise.all([api.route(t), api.weather(t), api.wind(t), refreshField()]).then(function (res) {
       var route = res[0], weather = noteSource(res[1]), wind = res[2];
+      shownRoute = route;
       var seuil = state.options ? state.options.rain_alert_threshold_mm : 0.5;
       var v = UI.verdictOf(weather, seuil);
 
@@ -211,6 +217,7 @@
     return Promise.all([api.windows(t), api.route(t)]).then(function (res) {
       var payload = noteSource(res[0]);
       var slots = payload.windows, route = res[1];
+      shownRoute = route;
       var best = slots.reduce(function (a, b) { return b.score > a.score ? b : a; }, slots[0]);
       var usual = slots.filter(function (s) { return s.is_usual; })[0] ||
                   slots.filter(function (s) { return s.time === route.departure; })[0];
@@ -479,7 +486,7 @@
         '<section class="card">' +
           '<div class="card-pad">' +
             '<div class="card-title">État</div>' +
-            '<div class="small muted">Version 0.4.0 · ' +
+            '<div class="small muted">Version 0.5.0 · ' +
               (state.config.configured ? 'trajet réel configuré' : 'aucun trajet : données fictives') +
               (state.offline ? ' · API injoignable' : '') + '.</div>' +
           '</div>' +
@@ -506,7 +513,7 @@
     view.innerHTML = '<div class="note">Chargement…</div>';
     return ROUTES[path]().then(function (html) {
       view.innerHTML = html;
-      UI.mountMaps(view);   // les tuiles ont besoin de la largeur réelle du conteneur
+      UI.mountMaps(view, shownRoute);   // les tuiles ont besoin de la largeur réelle du conteneur
       w.scrollTo(0, keepScroll ? y : 0);
     }).catch(function (e) {
       view.innerHTML = '<div class="card card-pad">Erreur d’affichage : ' + esc(e && e.message) + '</div>';

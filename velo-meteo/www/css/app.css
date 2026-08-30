@@ -134,6 +134,37 @@ svg.chart,svg.map{display:block;width:100%;height:auto}
 .mapfoot{font-size:11px;color:var(--text-dim);padding:8px 12px;border-top:1px solid var(--line)}
 .mapwrap{position:relative}
 
+/* Curseur de parcours sous la carte : cran 0 = vue d'ensemble, puis un cran
+   par point de passage. Doit rester attrapable au pouce, gants compris. */
+.mapslider{padding:10px 14px 4px;border-top:1px solid var(--line)}
+.mapslider input[type=range]{
+  -webkit-appearance:none;appearance:none;width:100%;height:26px;
+  background:transparent;display:block;margin:0
+}
+.mapslider input[type=range]::-webkit-slider-runnable-track{
+  height:6px;border-radius:99px;background:var(--surface-2);border:1px solid var(--line)
+}
+.mapslider input[type=range]::-moz-range-track{
+  height:6px;border-radius:99px;background:var(--surface-2);border:1px solid var(--line)
+}
+.mapslider input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;appearance:none;width:26px;height:26px;margin-top:-11px;
+  border-radius:50%;background:var(--accent);border:3px solid var(--surface);box-shadow:var(--shadow)
+}
+.mapslider input[type=range]::-moz-range-thumb{
+  width:20px;height:20px;border-radius:50%;background:var(--accent);
+  border:3px solid var(--surface);box-shadow:var(--shadow)
+}
+.mapslider input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:4px}
+.slider-lbl{display:flex;align-items:center;gap:6px;font-size:13px;padding:2px 0 4px;min-height:22px}
+.slider-lbl .muted{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.slider-rate{
+  margin-left:auto;flex:none;font-size:12px;font-weight:700;
+  padding:2px 8px;border-radius:999px;background:var(--surface-2);color:var(--text-dim)
+}
+.slider-rate.t2,.slider-rate.t3,.slider-rate.t4{background:var(--rain-3);color:#fff}
+.slider-rate.t1{background:var(--rain-1);color:var(--text)}
+
 /* Fond de carte : tuiles OSM posees en absolu, tracé en SVG par-dessus.
    La hauteur est fixée en JS, une fois la largeur réelle connue. */
 .mapcanvas{position:relative;overflow:hidden;background:var(--surface-2);min-height:120px}

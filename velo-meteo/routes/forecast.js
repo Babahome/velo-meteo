@@ -291,14 +291,26 @@ function buildGrid(points, stepM, maxSide) {
   return { cells: out, stepLat: spanLat / (nLat - 1), stepLon: spanLon / (nLon - 1) };
 }
 
-/** Point de passage le plus proche d'une case de la grille (distance à plat). */
+/** Rang du point de passage le plus proche d'une case de la grille. */
 function nearestPoint(points, cell) {
-  let best = points[0], bestD = Infinity;
-  points.forEach(p => {
+  let best = 0, bestD = Infinity;
+  points.forEach((p, i) => {
     const d = (p.lat - cell.lat) ** 2 + (p.lon - cell.lon) ** 2;
-    if (d < bestD) { bestD = d; best = p; }
+    if (d < bestD) { bestD = d; best = i; }
   });
   return best;
+}
+
+/**
+ * Vue d'ensemble : chaque case prend l'intensité de l'image correspondant au
+ * point de passage le plus proche. C'est la lecture « est-ce que je vais me
+ * faire saucer sur ce trajet », là où une image seule répond « à cet instant ».
+ */
+function overview(grid, points, frames) {
+  return grid.cells.map((c, j) => ({
+    lat: c.lat, lon: c.lon,
+    rate: frames[nearestPoint(points, c)].rates[j]
+  }));
 }
 
 // La maille des modèles tourne autour de 2 km ; on échantillonne plus fin que
@@ -309,26 +321,43 @@ const GRID_MAX_SIDE = 7;    // 49 points au maximum dans la requête Open-Meteo
 
 /**
  * Champ de pluie autour du trajet, **à l'heure de passage** — et non à l'heure
- * courante comme le ferait une image radar. Chaque case prend l'horaire du
- * point de passage le plus proche : c'est ce qui rend la carte cohérente avec
- * le verdict et le profil de pluie.
+ * courante comme le ferait une image radar.
+ *
+ * On renvoie une image par point de passage : la même requête Open-Meteo les
+ * contient toutes, et le curseur de la carte peut alors passer de l'une à
+ * l'autre sans aller-retour réseau. `cells` reste la vue d'ensemble.
  */
 async function computeField(route, hhmm) {
   const grid = buildGrid(route.points, GRID_STEP_M, GRID_MAX_SIDE);
   const locs = await fetchForecast(grid.cells);
   const dep = nextDeparture(hhmm, locs[0].utc_offset_seconds || 0);
 
-  const cells = grid.cells.map((c, i) => {
-    const q = locs[i].minutely_15 || {};
-    const near = nearestPoint(route.points, c);
-    const at = new Date(dep.getTime() + near.offset_min * 60000);
+  // precipitation est un cumul sur 15 min : ×4 pour une intensité en mm/h.
+  // null quand le créneau n'existe pas dans la réponse : « pas de donnée » et
+  // « pas de pluie » ne doivent pas se confondre à l'écran.
+  const rateAt = (loc, at) => {
+    const q = loc.minutely_15 || {};
     const qi = (q.time || []).indexOf(isoLocal(at, 15));
-    // precipitation est un cumul sur 15 min : ×4 pour une intensité en mm/h.
-    return { lat: c.lat, lon: c.lon, rate: qi >= 0 ? +((q.precipitation[qi] || 0) * 4).toFixed(2) : 0 };
+    return qi >= 0 ? +((q.precipitation[qi] || 0) * 4).toFixed(2) : null;
+  };
+
+  const frames = route.points.map(p => {
+    const at = new Date(dep.getTime() + p.offset_min * 60000);
+    const raw = grid.cells.map((c, j) => rateAt(locs[j], at));
+    return {
+      i: p.i,
+      offset_min: p.offset_min,
+      time: pad(at.getUTCHours()) + ':' + pad(at.getUTCMinutes()),
+      // Hors fenêtre de prévision (départ trop lointain), l'image est marquée
+      // absente plutôt que renvoyée à zéro, qui se lirait « ciel sec ».
+      found: raw.some(r => r !== null),
+      rates: raw.map(r => (r === null ? 0 : r))
+    };
   });
 
   return {
-    cells: cells,
+    cells: overview(grid, route.points, frames),
+    frames: frames,
     step_lat: +grid.stepLat.toFixed(5),
     step_lon: +grid.stepLon.toFixed(5),
     at: isoLocal(dep, 15)
@@ -336,25 +365,54 @@ async function computeField(route, hhmm) {
 }
 
 /**
- * Averse fictive centrée sur le milieu du trajet, pour juger le rendu sans
- * attendre qu'il pleuve vraiment au-dessus du trajet — ce qui n'arrive jamais
- * au moment où on développe.
+ * Averse fictive, pour juger le rendu sans attendre qu'il pleuve vraiment
+ * au-dessus du trajet — ce qui n'arrive jamais au moment où on développe.
+ *
+ * Elle **traverse** la carte au fil des images : un nuage immobile ne dirait
+ * pas si le curseur fait vraiment changer l'heure.
  */
-function demoField(route) {
+function demoField(route, hhmm) {
   const grid = buildGrid(route.points, GRID_STEP_M, GRID_MAX_SIDE);
-  const mid = route.points[Math.floor(route.points.length / 2)];
+  const pts = route.points;
+  const mid = pts[Math.floor(pts.length / 2)];
   const spread = Math.max(grid.stepLat, grid.stepLon) * 1.1;
 
-  const cells = grid.cells.map(c => {
-    // Une averse serrée sur le trajet, une seconde plus faible au nord-ouest :
-    // le but est de voir les bords du nuage, pas de noyer la carte.
-    const d1 = Math.hypot(c.lat - mid.lat, c.lon - mid.lon) / spread;
-    const d2 = Math.hypot(c.lat - (mid.lat + spread * 1.6), c.lon - (mid.lon - spread * 1.6)) / spread;
-    const rate = 9 * Math.exp(-d1 * d1) + 2.5 * Math.exp(-d2 * d2);
-    return { lat: c.lat, lon: c.lon, rate: +rate.toFixed(2) };
+  // Deux heures fictives suffisent : le curseur lit `frames`, pas l'horloge.
+  const parts = String(hhmm || '08:00').split(':');
+  const dep = (parseInt(parts[0], 10) || 0) * 60 + (parseInt(parts[1], 10) || 0);
+
+  // Le jeu de données fictif n'a pas d'`offset_min` : on le reconstitue à
+  // partir du rang du point et de la durée du trajet.
+  const offsetOf = (p, k) => (typeof p.offset_min === 'number' ? p.offset_min
+    : Math.round(((route.duration_min || 30) * k) / Math.max(1, pts.length - 1)));
+
+  const frames = pts.map((p, k) => {
+    // L'averse arrive du sud-ouest et sort par le nord-est le long du trajet.
+    const t = pts.length > 1 ? k / (pts.length - 1) - 0.5 : 0;
+    const cLat = mid.lat + spread * 3 * t;
+    const cLon = mid.lon + spread * 3 * t;
+    const m = dep + offsetOf(p, k);
+
+    return {
+      i: p.i,
+      offset_min: offsetOf(p, k),
+      time: p.time || (String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0')),
+      found: true,
+      rates: grid.cells.map(c => {
+        const d1 = Math.hypot(c.lat - cLat, c.lon - cLon) / spread;
+        const d2 = Math.hypot(c.lat - (cLat + spread * 1.6), c.lon - (cLon - spread * 1.6)) / spread;
+        return +(9 * Math.exp(-d1 * d1) + 2.5 * Math.exp(-d2 * d2)).toFixed(2);
+      })
+    };
   });
 
-  return { cells, step_lat: +grid.stepLat.toFixed(5), step_lon: +grid.stepLon.toFixed(5), at: null };
+  return {
+    cells: overview(grid, pts, frames),
+    frames: frames,
+    step_lat: +grid.stepLat.toFixed(5),
+    step_lon: +grid.stepLon.toFixed(5),
+    at: null
+  };
 }
 
 /**

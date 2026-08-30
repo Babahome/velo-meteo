@@ -145,10 +145,25 @@ l'heure de départ. Deux échelles de temps sur le même écran se lisent de tra
 > case y dépasse le kilomètre, ce qui donne un aplat uniforme sur une carte cadrée à
 > quelques kilomètres. D'où le choix d'Open-Meteo.
 
-**Réglages → Nuages de pluie → Simuler une averse** pose une averse fictive au milieu du
-trajet. Elle emprunte exactement le même chemin que les vraies données, ce qui permet de
+**Réglages → Nuages de pluie → Simuler une averse** fait traverser la carte à une averse
+fictive. Elle emprunte exactement le même chemin que les vraies données, ce qui permet de
 juger le rendu sans attendre qu'il pleuve pour de bon au-dessus du trajet. Le verdict et
 les chiffres, eux, ne bougent pas.
+
+### Le curseur de parcours
+
+Sous la carte, un curseur déplace un point le long du trajet.
+
+- **Cran 0 — vue d'ensemble** : chaque case de la grille à l'heure du point de passage le
+  plus proche. C'est la lecture « où vais-je me faire saucer sur tout le trajet ».
+- **Crans suivants** : un par point de passage. Le marqueur se pose dessus et toute la
+  carte bascule sur **l'heure où tu y seras**. On voit ainsi l'averse arriver ou s'éloigner
+  au fil du parcours. Le libellé donne l'heure, le lieu et l'intensité à cet endroit.
+
+Les images arrivent toutes dans la même réponse — une par point de passage — donc changer
+de cran ne déclenche aucune requête : seul le calque SVG est réécrit, les tuiles restent
+en place. Si l'heure d'un point sort de la fenêtre de prévision, le curseur affiche
+« pas de prévision » plutôt qu'un ciel sec, qui serait faux.
 
 ### Les trois variantes de l'écran d'accueil
 
@@ -245,7 +260,7 @@ Toutes les routes renvoient `source: "live"` ou `"mock"`, et `error` quand un re
 | `GET /api/route?type=morning\|evening` | Trajet, points de passage, tracé projeté |
 | `GET /api/weather?type=…` | mm/h, cumul, % et ressenti par point ; pic, cumul total |
 | `GET /api/wind?type=…` | Force, rafales, secteur, orientation relative au trajet |
-| `GET /api/radar?type=…&demo=1` | Nuages de pluie : grille de points autour du trajet, intensité à l'heure de passage. `demo=1` renvoie une averse fictive |
+| `GET /api/radar?type=…&demo=1` | Nuages de pluie : grille autour du trajet, `cells` en vue d'ensemble et `frames` (une image par point de passage) pour le curseur. `demo=1` renvoie une averse fictive |
 | `GET /api/stats/windows?type=…` | 9 créneaux de départ autour de l'horaire habituel |
 | `GET /api/stats/history` | 21 jours de trajets secs / mouillés (fictif) |
 | `GET /api/trip` | Trajet configuré, ou `{ configured: false }` |
@@ -259,8 +274,8 @@ Toutes les routes renvoient `source: "live"` ou `"mock"`, et `error` quand un re
 ## Ce qui reste à faire
 
 - **Historique réel** : enregistrer chaque trajet dans `/data` au fil des jours.
-- **Pluie en mouvement** : la carte montre l'état à l'heure de passage, pas le déplacement
-  de l'averse. Une animation sur quelques pas de 15 minutes dirait si elle arrive ou s'en va.
+- **Lecture automatique** : le curseur se déplace à la main ; une animation en boucle
+  donnerait le mouvement de l'averse d'un coup d'œil.
 - **Notifications** : push via `notify_service` quand le seuil de pluie est dépassé avant
   le départ, en utilisant `ha_long_lived_token`.
 - **Trajets multiples** : la structure ne gère aujourd'hui qu'un couple domicile ↔ travail.

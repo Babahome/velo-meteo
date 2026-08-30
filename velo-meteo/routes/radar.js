@@ -32,8 +32,12 @@ router.get('/', async (req, res) => {
   // là qu'on regarde le rendu avant d'avoir renseigné quoi que ce soit.
   if (demo) {
     const trip = store.getTrip();
-    const route = store.isConfigured(trip) ? trip.routes[type] : TRIPS[type];
-    const field = forecast.demoField(route);
+    const configured = store.isConfigured(trip);
+    const route = configured ? trip.routes[type] : TRIPS[type];
+    const hhmm = configured
+      ? (type === 'evening' ? trip.evening_time : trip.morning_time)
+      : TRIPS[type].departure;
+    const field = forecast.demoField(route, hhmm);
     return res.json(Object.assign({ available: true, source: 'demo', error: null }, field));
   }
 
