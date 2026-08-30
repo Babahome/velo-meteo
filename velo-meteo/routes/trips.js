@@ -32,6 +32,7 @@ function publicTrip(trip) {
     updated_at: trip.updated_at,
     source: trip.source || 'osrm',
     gpx_name: trip.gpx_name || null,
+    gpx_file: trip.gpx_file || null,
     routes: {
       morning: publicRoute(trip.routes.morning),
       evening: publicRoute(trip.routes.evening)
@@ -97,6 +98,9 @@ router.post('/gpx', express.text({ type: () => true, limit: '12mb' }), async (re
   const evening_time = HHMM.test(q.evening_time) ? q.evening_time : '18:00';
   const direction = q.direction === 'evening' ? 'evening' : 'morning';
   const speed = Math.min(45, Math.max(5, parseFloat(q.speed_kmh) || 18));
+  // Le nom du fichier n'existe que côté navigateur : sans lui, l'app ne peut plus
+  // dire quelle trace est en place une fois l'import terminé.
+  const filename = String(q.filename || '').replace(/[\r\n\t]/g, ' ').trim().slice(0, 120) || null;
 
   let track;
   try {
@@ -144,6 +148,7 @@ router.post('/gpx', express.text({ type: () => true, limit: '12mb' }), async (re
       home, work, morning_time, evening_time,
       source: 'gpx',
       gpx_name: track.name || null,
+      gpx_file: filename,
       routes: direction === 'morning'
         ? { morning: forward, evening: backward }
         : { morning: backward, evening: forward },
@@ -155,6 +160,7 @@ router.post('/gpx', express.text({ type: () => true, limit: '12mb' }), async (re
       configured: true,
       trip: publicTrip(trip),
       imported: {
+        file: filename,
         points: coords.length,
         distance_km: +(meters / 1000).toFixed(1),
         duration_min: Math.round(duration / 60),

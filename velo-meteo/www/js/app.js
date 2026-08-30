@@ -9,14 +9,32 @@
   var esc = UI.esc, num = UI.num;
 
   var LAYOUTS = {
-    A: { name: 'A · Verdict d’abord', desc: 'Verdict → profil de pluie → vent → graphe → carte. Le plus rapide à lire avant de partir.' },
-    B: { name: 'B · Carte d’abord', desc: 'Carte en haut, verdict compact dessous. Plus visuel, demande un scroll pour les chiffres.' },
+    A: { name: 'A · Verdict d’abord', desc: 'Verdict → profil de pluie → vent → carte → graphe. Les chiffres avant l’image.' },
+    B: { name: 'B · Carte d’abord', desc: 'Carte → graphe de pluie par point de passage → verdict → profil → vent. Le plus visuel.' },
     C: { name: 'C · Coup d’œil', desc: 'Verdict + profil + vent seulement, le reste replié. Une seule hauteur d’écran, zéro scroll.' }
   };
 
+  /**
+   * B (carte d'abord) devient le layout par défaut. Le choix « A » hérité de la
+   * phase maquette est basculé une seule fois, sinon le changement resterait
+   * invisible sur un téléphone qui a déjà `vm.layout` en mémoire. Repasser en A
+   * depuis Réglages reste possible, et n'est plus jamais écrasé ensuite.
+   */
+  function initialLayout() {
+    var stored = localStorage.getItem('vm.layout');
+    if (!localStorage.getItem('vm.layout.carte-dabord')) {
+      localStorage.setItem('vm.layout.carte-dabord', '1');
+      if (!stored || stored === 'A') {
+        localStorage.setItem('vm.layout', 'B');
+        return 'B';
+      }
+    }
+    return stored || 'B';
+  }
+
   var state = {
     trip: null,          // 'morning' | 'evening' (null = auto selon l'heure)
-    layout: localStorage.getItem('vm.layout') || 'A',
+    layout: initialLayout(),
     options: null,
     config: { configured: false, trip: null },
     source: 'mock',
@@ -27,7 +45,9 @@
     saveMsg: null,
     // Import GPX : le fichier choisi survit aux rendus, l'<input type=file>
     // étant remis à zéro à chaque réécriture du formulaire.
-    gpx: { direction: 'morning', speed: '18', file: null, busy: false, msg: null }
+    gpx: { direction: 'morning', speed: '18', file: null, busy: false, msg: null },
+    field: { available: false, cells: [] },
+    demoRain: localStorage.getItem('vm.demo-rain') === '1'
   };
 
   function currentTrip() {
@@ -64,8 +84,21 @@
     windows: function (t) { return get('/api/stats/windows?type=' + t, function () { return MOCK.windows(t); }); },
     history: function () { return get('/api/stats/history', function () { return MOCK.history(); }); },
     options: function () { return get('/api/options', function () { return MOCK.options; }); },
-    trip: function () { return get('/api/trip', function () { return MOCK.trip; }); }
+    trip: function () { return get('/api/trip', function () { return MOCK.trip; }); },
+    field: function (t) {
+      return get('/api/radar?type=' + t + (state.demoRain ? '&demo=1' : ''),
+                 function () { return { available: false, cells: [] }; });
+    }
   };
+
+  /** Recharge les nuages de pluie : ils suivent le trajet affiché et l'heure. */
+  function refreshField() {
+    return api.field(currentTrip()).then(function (f) {
+      state.field = f || { available: false, cells: [] };
+      UI.setField(state.field);
+      return state.field;
+    });
+  }
 
   /* ---------- coquille ---------- */
 
@@ -121,7 +154,7 @@
   function pageHome() {
     var t = currentTrip();
     setSwitch(true);
-    return Promise.all([api.route(t), api.weather(t), api.wind(t)]).then(function (res) {
+    return Promise.all([api.route(t), api.weather(t), api.wind(t), refreshField()]).then(function (res) {
       var route = res[0], weather = noteSource(res[1]), wind = res[2];
       var seuil = state.options ? state.options.rain_alert_threshold_mm : 0.5;
       var v = UI.verdictOf(weather, seuil);
@@ -132,14 +165,16 @@
         '<a class="btn" href="#/creneaux">⏱️ Voir le meilleur créneau</a>' +
         '<a class="btn ghost" href="#/historique">📊 Historique du vélotaf</a>';
 
+      // Carte en premier, puis le graphe de pluie par point de passage :
+      // on situe le trajet, puis on lit où ça tombe dessus.
       if (state.layout === 'B') {
         return head +
           UI.radarMap(route) +
+          UI.rainChart(weather) +
           UI.verdictCard(weather, v, true) +
-          UI.routeSummary(route) +
           UI.profileStrip(route, weather) +
           UI.windCard(wind) +
-          UI.rainChart(weather) +
+          UI.routeSummary(route) +
           cta;
       }
 
@@ -148,19 +183,21 @@
           UI.verdictCard(weather, v, false) +
           UI.profileStrip(route, weather) +
           UI.windCard(wind) +
-          '<details class="acc"><summary>Détail par point de passage</summary>' +
-            '<div class="acc-body">' + UI.rainChart(weather) + '</div></details>' +
           '<details class="acc"><summary>Carte du trajet</summary>' +
             '<div class="acc-body">' + UI.radarMap(route) + '</div></details>' +
+          '<details class="acc"><summary>Détail par point de passage</summary>' +
+            '<div class="acc-body">' + UI.rainChart(weather) + '</div></details>' +
           cta;
       }
 
+      // Même en A, la carte passe avant le graphe : elle donne le contexte que
+      // le graphe suppose connu.
       return head +
         UI.verdictCard(weather, v, false) +
         UI.profileStrip(route, weather) +
         UI.windCard(wind) +
-        UI.rainChart(weather) +
         UI.radarMap(route) +
+        UI.rainChart(weather) +
         UI.routeSummary(route) +
         cta;
     });
@@ -288,20 +325,66 @@
     return state.form;
   }
 
+  /**
+   * Nom du fichier sélectionné (avant import) ou importé (après). Isolé parce
+   * qu'il est réécrit seul, sans repasser par un rendu complet de la page.
+   */
+  function gpxFileLine() {
+    var g = state.gpx;
+    var t = state.config.trip;
+    if (g.file) return '📄 Fichier choisi : <b>' + esc(g.file.name) + '</b>';
+    if (t && t.source === 'gpx' && t.gpx_file) {
+      return '📄 Trace en place : <b>' + esc(t.gpx_file) + '</b>' +
+        (t.gpx_name ? ' <span class="muted">· ' + esc(t.gpx_name) + '</span>' : '');
+    }
+    return '<span class="muted">Aucune trace importée.</span>';
+  }
+
+  /**
+   * Carte « Nuages de pluie » de la page Réglages : état de la couche, et
+   * interrupteur d'averse simulée. Sans lui, valider le rendu des nuages
+   * demande d'attendre qu'il pleuve vraiment au-dessus du trajet — autant dire
+   * jamais au moment où on regarde.
+   */
+  function radarCard() {
+    var f = state.field || {};
+    var wet = (f.cells || []).filter(function (c) { return c.rate >= 0.05; }).length;
+    var etat;
+    if (f.source === 'demo') etat = '☔ Averse simulée · ' + wet + ' cases de la grille arrosées';
+    else if (f.available) {
+      etat = '✅ Couche active · ' + (f.cells || []).length + ' points interrogés' +
+        (wet ? ', ' + wet + ' avec de la pluie' : ', tous secs');
+    } else {
+      etat = '⚠️ Couche indisponible' + (f.error ? ' · ' + esc(f.error) : ' · aucun trajet configuré');
+    }
+
+    return '<section class="card">' +
+        '<div class="card-pad" style="padding-bottom:4px"><div class="card-title">Nuages de pluie</div></div>' +
+        '<div class="opt-list" role="group">' +
+          '<button class="opt" data-action="toggle-demo-rain" aria-checked="' + state.demoRain + '" role="checkbox">' +
+            '<span class="mark"></span>' +
+            '<span><span class="t">Simuler une averse</span>' +
+            '<span class="d">Pose une averse fictive au milieu du trajet, pour juger le rendu sans attendre la vraie pluie. Le verdict et les chiffres ne changent pas.</span></span>' +
+          '</button>' +
+        '</div>' +
+        '<div class="card-pad"><div class="small muted">' + etat + '</div>' +
+        '<div class="note" style="margin-top:8px">Les nuages viennent d’Open-Meteo, sur une grille d’environ 2 km autour du trajet, ' +
+        'et valent pour <b>l’heure de passage</b> — pas pour maintenant comme le ferait une image radar. ' +
+        'RainViewer a été écarté : ses tuiles s’arrêtent au zoom 7 en accès libre, bien trop grossier à l’échelle d’un vélotaf.</div></div>' +
+      '</section>';
+  }
+
   /** Carte « Importer une trace GPX » de la page Réglages. */
   function gpxCard() {
     var g = state.gpx;
     var msg = g.msg ? '<div class="formmsg ' + g.msg.kind + '">' + esc(g.msg.text) + '</div>' : '';
-    var chosen = g.file
-      ? '<div class="small muted">Fichier choisi : <b>' + esc(g.file.name) + '</b></div>'
-      : '';
 
     return '<section class="card">' +
         '<div class="card-pad" style="padding-bottom:6px"><div class="card-title">Importer une trace GPX</div></div>' +
         '<div class="form">' +
           '<label class="field"><span>Fichier .gpx</span>' +
             '<input type="file" name="gpx_file" accept=".gpx,application/gpx+xml,text/xml"></label>' +
-          chosen +
+          '<div class="small filename" data-gpx-name>' + gpxFileLine() + '</div>' +
           // Un select à mi-largeur tronque les deux libellés sur un téléphone.
           '<label class="field"><span>Sens de la trace</span>' +
             '<select name="gpx_direction">' +
@@ -322,7 +405,9 @@
 
   function pageSettings() {
     setSwitch(false);
-    return Promise.all([api.options(), api.trip()]).then(function (res) {
+    // refreshField() aussi ici : sans lui, l'état des nuages affiché dans
+    // Réglages serait celui du dernier passage sur l'accueil.
+    return Promise.all([api.options(), api.trip(), refreshField()]).then(function (res) {
       state.options = res[0];
       state.config = res[1] || { configured: false, trip: null };
 
@@ -340,7 +425,8 @@
         '<div class="row"><span class="k">Aller</span><span class="v">' + leg(t.routes.morning) + '</span></div>' +
         '<div class="row"><span class="k">Retour</span><span class="v">' + leg(t.routes.evening) + '</span></div>' +
         (t.source === 'gpx'
-          ? '<div class="row"><span class="k">Origine</span><span class="v">Trace GPX' +
+          ? '<div class="row"><span class="k">Origine</span><span class="v">' +
+            esc(t.gpx_file || 'Trace GPX') +
             (t.gpx_name ? ' · ' + esc(t.gpx_name) : '') + '</span></div>'
           : '') : '';
 
@@ -388,10 +474,12 @@
           '<div class="opt-list" role="radiogroup">' + opts + '</div>' +
         '</section>' +
 
+        radarCard() +
+
         '<section class="card">' +
           '<div class="card-pad">' +
             '<div class="card-title">État</div>' +
-            '<div class="small muted">Version 0.3.0 · ' +
+            '<div class="small muted">Version 0.4.0 · ' +
               (state.config.configured ? 'trajet réel configuré' : 'aucun trajet : données fictives') +
               (state.offline ? ' · API injoignable' : '') + '.</div>' +
           '</div>' +
@@ -405,15 +493,21 @@
 
   var ROUTES = { '/': pageHome, '/creneaux': pageWindows, '/historique': pageHistory, '/reglages': pageSettings };
 
-  function render() {
+  /**
+   * `keepScroll` sert aux rendus déclenchés depuis la page elle-même : sans lui,
+   * remonter en haut renvoie le message de confirmation hors de l'écran, et
+   * l'utilisateur croit qu'il ne s'est rien passé.
+   */
+  function render(keepScroll) {
     var path = (location.hash || '#/').slice(1);
     if (!ROUTES[path]) path = '/';
+    var y = w.scrollY || w.pageYOffset || 0;
     setTabs(path);
     view.innerHTML = '<div class="note">Chargement…</div>';
     return ROUTES[path]().then(function (html) {
       view.innerHTML = html;
       UI.mountMaps(view);   // les tuiles ont besoin de la largeur réelle du conteneur
-      w.scrollTo(0, 0);
+      w.scrollTo(0, keepScroll ? y : 0);
     }).catch(function (e) {
       view.innerHTML = '<div class="card card-pad">Erreur d’affichage : ' + esc(e && e.message) + '</div>';
     });
@@ -443,9 +537,14 @@
     var el = e.target;
     if (el.name === 'gpx_direction') { state.gpx.direction = el.value; return; }
     if (el.name !== 'gpx_file') return;
+
     state.gpx.file = el.files && el.files[0] ? el.files[0] : null;
     state.gpx.msg = null;
-    render();   // l'input est vidé au rendu suivant : le nom s'affiche à côté
+    // Surtout pas de rendu ici : il viderait l'<input type=file>, qui
+    // réafficherait « Aucun fichier choisi » juste après la sélection. On met à
+    // jour la seule ligne concernée.
+    var out = view.querySelector('[data-gpx-name]');
+    if (out) out.innerHTML = gpxFileLine();
   });
 
   view.addEventListener('click', function (e) {
@@ -453,7 +552,7 @@
     if (opt) {
       state.layout = opt.getAttribute('data-layout');
       localStorage.setItem('vm.layout', state.layout);
-      render();
+      render(true);
       return;
     }
 
@@ -463,24 +562,32 @@
     if (btn.getAttribute('data-action') === 'save-trip') saveTrip();
     if (btn.getAttribute('data-action') === 'clear-trip') clearTrip();
     if (btn.getAttribute('data-action') === 'import-gpx') importGpx();
+
+    if (btn.getAttribute('data-action') === 'toggle-demo-rain') {
+      state.demoRain = !state.demoRain;
+      localStorage.setItem('vm.demo-rain', state.demoRain ? '1' : '0');
+      refreshField().then(function () { render(true); });
+    }
   });
 
   function importGpx() {
     var g = state.gpx;
     if (!g.file) {
       g.msg = { kind: 'err', text: 'Choisis d’abord un fichier .gpx.' };
-      return render();
+      return render(true);
     }
 
     var f = formValues();
+    var name = g.file.name;
     var qs = '?direction=' + encodeURIComponent(g.direction) +
              '&speed_kmh=' + encodeURIComponent(g.speed) +
              '&morning_time=' + encodeURIComponent(f.morning_time) +
-             '&evening_time=' + encodeURIComponent(f.evening_time);
+             '&evening_time=' + encodeURIComponent(f.evening_time) +
+             '&filename=' + encodeURIComponent(name);
 
     g.busy = true;
-    g.msg = { kind: 'info', text: 'Lecture de la trace et géocodage du départ…' };
-    render();
+    g.msg = { kind: 'info', text: 'Lecture de ' + name + ' et géocodage du départ…' };
+    render(true);
 
     // Le fichier part tel quel : l'encapsuler en JSON gonflerait une trace de
     // plusieurs mégaoctets pour rien.
@@ -497,15 +604,15 @@
       state.config = res;
       state.form = null;
       var im = res.imported;
-      g.file = null;
-      g.msg = { kind: 'ok', text: 'Trace importée : ' + num(im.distance_km) + ' km, ' + im.duration_min + ' min ' +
+      g.file = null;   // le nom réapparaît via le trajet enregistré, pas via l'input
+      g.msg = { kind: 'ok', text: name + ' importé : ' + num(im.distance_km) + ' km, ' + im.duration_min + ' min ' +
         (im.timed ? '(durée lue dans la trace)' : '(estimés à ' + g.speed + ' km/h)') +
         (im.elevation_gain_m ? ' · +' + im.elevation_gain_m + ' m de dénivelé' : '') + '.' };
     }).catch(function (err) {
       g.msg = { kind: 'err', text: err.message || String(err) };
     }).then(function () {
       g.busy = false;
-      render();
+      render(true);
     });
   }
 
@@ -513,7 +620,7 @@
     var f = formValues();
     if (!f.home_address.trim() || !f.work_address.trim()) {
       state.saveMsg = { kind: 'err', text: 'Renseigne les deux adresses.' };
-      return render();
+      return render(true);
     }
 
     var t = state.config.trip;
@@ -522,7 +629,7 @@
 
     state.saving = true;
     state.saveMsg = { kind: 'info', text: sameAddresses ? 'Mise à jour des horaires…' : 'Géocodage et calcul des deux itinéraires…' };
-    render();
+    render(true);
 
     var req = sameAddresses
       ? send('PUT', '/api/trip/times', { morning_time: f.morning_time, evening_time: f.evening_time })
@@ -539,7 +646,7 @@
       state.saveMsg = { kind: 'err', text: err.message || String(err) };
     }).then(function () {
       state.saving = false;
-      render();
+      render(true);
     });
   }
 
@@ -555,10 +662,10 @@
     });
   }
 
-  w.addEventListener('hashchange', render);
+  w.addEventListener('hashchange', function () { render(); });
 
   Promise.all([api.options(), api.trip()]).then(function (res) {
     state.options = res[0];
     state.config = res[1] || { configured: false, trip: null };
-  }).then(render);
+  }).then(function () { render(); });
 })(window, document);

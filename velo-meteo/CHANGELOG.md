@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.4.0 — Nuages de pluie, carte d'abord, nom du GPX
+
+- **Nuages de précipitations sur la carte**, à l'heure de passage. Une grille de ~900 m
+  autour du trajet est interrogée chez Open-Meteo, chaque case à l'heure où le vélo passe
+  à côté ; le rendu est un aplat flouté dans le calque SVG déjà posé sur les tuiles.
+  - **RainViewer a été écarté** : ses tuiles s'arrêtent au zoom 7 en accès libre (au-delà
+    il renvoie une image « Zoom Level Not Supported »), soit une case de plus d'un
+    kilomètre — un aplat uniforme à l'échelle d'un vélotaf. Et une image radar montre ce
+    qui tombe *maintenant*, quand tout le reste de l'app parle de l'heure de départ :
+    deux lectures contradictoires sur le même écran.
+  - **Averse simulée** (Réglages → Nuages de pluie) : pose une averse fictive sur le
+    trajet pour juger le rendu sans attendre qu'il pleuve vraiment. Elle passe par le
+    même chemin que les vraies données, donc elle teste bien l'affichage réel.
+- **Carte en premier** sur l'écran d'accueil, puis le graphe de pluie par point de
+  passage. Le layout B devient le layout par défaut ; un choix « A » hérité de la phase
+  maquette est basculé une seule fois, sinon le changement resterait invisible sur un
+  téléphone qui a déjà son réglage en mémoire. Repasser en A dans Réglages reste possible.
+  La carte passe aussi avant le graphe dans les layouts A et C.
+
+Corrections :
+
+- **Nom du fichier GPX** : il disparaissait dès que le formulaire était réaffiché.
+  Choisir un fichier ne provoque plus de rendu complet — c'est lui qui vidait l'`<input
+  type=file>` et faisait réapparaître « Aucun fichier choisi ». Le nom est désormais
+  enregistré avec le trajet, et visible dans le message de confirmation, sous le champ
+  et dans la ligne « Origine ».
+- Un rendu déclenché depuis la page ne remonte plus en haut de l'écran : les messages de
+  confirmation restaient hors de vue, et on croyait qu'il ne s'était rien passé.
+
 ## 0.3.0 — Fond de carte, trace GPX, icône PWA
 
 - **Fond de carte** : les tuiles OpenStreetMap remplacent la grille SVG. Le tracé se

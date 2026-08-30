@@ -131,14 +131,34 @@ par-dessus. Elle n'est ni déplaçable ni zoomable : c'est une vue du trajet, pa
 à explorer. Dans le thème sombre les tuiles sont assombries — une carte OSM brute éblouit
 la nuit. Sans accès Internet, seul le tracé reste, sur fond neutre, et la légende le dit.
 
+### Les nuages de pluie
+
+Par-dessus la carte, les précipitations **à l'heure où tu passes**. Une grille d'environ
+900 m est échantillonnée autour du trajet chez Open-Meteo, chaque case à l'horaire du
+point de passage le plus proche, et le résultat est dessiné en taches floues.
+
+C'est une **prévision**, pas une image radar, et c'est délibéré : un radar montre ce qui
+tombe maintenant, alors que le reste de l'écran (verdict, profil, créneaux) parle de
+l'heure de départ. Deux échelles de temps sur le même écran se lisent de travers.
+
+> RainViewer, envisagé au départ, plafonne ses tuiles au **zoom 7** en accès libre : une
+> case y dépasse le kilomètre, ce qui donne un aplat uniforme sur une carte cadrée à
+> quelques kilomètres. D'où le choix d'Open-Meteo.
+
+**Réglages → Nuages de pluie → Simuler une averse** pose une averse fictive au milieu du
+trajet. Elle emprunte exactement le même chemin que les vraies données, ce qui permet de
+juger le rendu sans attendre qu'il pleuve pour de bon au-dessus du trajet. Le verdict et
+les chiffres, eux, ne bougent pas.
+
 ### Les trois variantes de l'écran d'accueil
 
 Réglages → *Layout de l'accueil*, puis retour sur **Aujourd'hui**. Le choix est mémorisé
 dans le navigateur du téléphone.
 
-- **A — Verdict d'abord** : verdict → profil de pluie → vent → graphe → carte.
+- **B — Carte d'abord** (par défaut) : carte → graphe de pluie par point de passage →
+  verdict → profil → vent. On situe le trajet, puis on lit où ça tombe dessus.
+- **A — Verdict d'abord** : verdict → profil de pluie → vent → carte → graphe.
   Tout ce qui décide « j'y vais ou pas » tient dans le premier écran.
-- **B — Carte d'abord** : plus visuel, mais il faut scroller pour les chiffres.
 - **C — Coup d'œil** : verdict + profil + vent, le reste replié. Zéro scroll.
 
 ### mm/h ou mm : deux chiffres différents
@@ -173,6 +193,7 @@ velo-meteo/
 │  ├─ forecast.js   Open-Meteo, assemblage, cache 5 min, créneaux
 │  ├─ mock-data.js  jeu de données fictif (repli)
 │  ├─ route.js      tracé + points de passage
+│  ├─ radar.js      nuages de pluie autour du trajet (+ averse simulée)
 │  ├─ weather.js    mm/h et % par point
 │  ├─ wind.js       force, rafales, orientation relative
 │  ├─ stats.js      historique + créneaux
@@ -196,6 +217,7 @@ velo-meteo/
 | [OSRM](https://routing.openstreetmap.de) (profil vélo, FOSSGIS) | Itinéraire | À l'enregistrement du trajet |
 | [Open-Meteo](https://open-meteo.com) | Pluie, vent, ressenti | À l'affichage, cache 5 min |
 | [Tuiles OSM](https://tile.openstreetmap.org) | Fond de carte | À chaque affichage de la carte |
+| [Open-Meteo](https://open-meteo.com) | Nuages de pluie (grille ~900 m) | À l'affichage de la carte, cache 5 min |
 
 Aucune clé d'API n'est nécessaire. Nominatim impose 1 requête/seconde et un User-Agent
 identifiant l'application : les deux sont respectés, et l'appel n'a lieu qu'à
@@ -208,6 +230,7 @@ l'enregistrement, jamais en boucle. Données © contributeurs OpenStreetMap.
 | React + Vite | HTML/CSS/JS vanilla | Pas d'étape de build : image Docker construite en quelques secondes sur le Pi, et une modif de layout est visible après un simple redémarrage. Aligné sur `sudoku` et `kitchencore`. |
 | Recharts | Graphe SVG écrit à la main | ~60 lignes, aucune dépendance. |
 | MapLibre GL JS | Tuiles OSM posées à la main + calque SVG | La carte n'est ni déplaçable ni zoomable : elle cadre le trajet, point. ~70 lignes contre ~800 ko de bibliothèque dans l'image Docker. |
+| Tuiles radar RainViewer | Grille Open-Meteo dessinée en SVG | RainViewer plafonne au zoom 7 en accès libre : trop grossier pour un vélotaf. Et il montre « maintenant » là où le reste de l'app montre l'heure de départ. |
 | Une lib GPX | Lecture à l'expression régulière | Un GPX est un XML plat dont on n'exploite que `trkpt`, `ele` et `time`. Ajouter un parseur XML complet à une image qui ne contient qu'express pour quatre balises ne se justifie pas. |
 | SQLite (`better-sqlite3`) | JSON dans `/data` | Compilation native très lente sur armv7/aarch64 pour un volume de données minuscule. |
 
@@ -222,6 +245,7 @@ Toutes les routes renvoient `source: "live"` ou `"mock"`, et `error` quand un re
 | `GET /api/route?type=morning\|evening` | Trajet, points de passage, tracé projeté |
 | `GET /api/weather?type=…` | mm/h, cumul, % et ressenti par point ; pic, cumul total |
 | `GET /api/wind?type=…` | Force, rafales, secteur, orientation relative au trajet |
+| `GET /api/radar?type=…&demo=1` | Nuages de pluie : grille de points autour du trajet, intensité à l'heure de passage. `demo=1` renvoie une averse fictive |
 | `GET /api/stats/windows?type=…` | 9 créneaux de départ autour de l'horaire habituel |
 | `GET /api/stats/history` | 21 jours de trajets secs / mouillés (fictif) |
 | `GET /api/trip` | Trajet configuré, ou `{ configured: false }` |
@@ -235,8 +259,8 @@ Toutes les routes renvoient `source: "live"` ou `"mock"`, et `error` quand un re
 ## Ce qui reste à faire
 
 - **Historique réel** : enregistrer chaque trajet dans `/data` au fil des jours.
-- **Radar de pluie** : superposer les tuiles RainViewer au fond de carte. Les cellules de
-  pluie ne s'affichent aujourd'hui qu'en mode maquette.
+- **Pluie en mouvement** : la carte montre l'état à l'heure de passage, pas le déplacement
+  de l'averse. Une animation sur quelques pas de 15 minutes dirait si elle arrive ou s'en va.
 - **Notifications** : push via `notify_service` quand le seuil de pluie est dépassé avant
   le départ, en utilisant `ha_long_lived_token`.
 - **Trajets multiples** : la structure ne gère aujourd'hui qu'un couple domicile ↔ travail.

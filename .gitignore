@@ -5,3 +5,7 @@ npm-debug.log*
 *.db-shm
 .DS_Store
 Thumbs.db
+
+# Traces GPX personnelles : elles contiennent le trajet domicile <-> travail.
+Gpx/
+*.gpx

@@ -186,6 +186,11 @@
   var mapSeq = 0;
   var maps = {};   // id -> données de la carte, en attente d'insertion dans le DOM
 
+  // Champ de pluie autour du trajet (grille Open-Meteo), renseigné par app.js.
+  var field = { available: false, cells: [] };
+
+  function setField(data) { field = data || { available: false, cells: [] }; }
+
   function lonToWorld(lon, z) {
     return ((lon + 180) / 360) * TILE_SIZE * Math.pow(2, z);
   }
@@ -215,6 +220,31 @@
       .map(function (p) { return [p.lat, p.lon]; });
   }
 
+  /**
+   * Nuages de pluie : une tache par case de la grille, floutée pour que les
+   * cases voisines se fondent en une seule masse. Sans le flou, on lit une
+   * mosaïque de disques — ce qui donnerait à la grille une précision qu'elle
+   * n'a pas (maille de ~2 km).
+   */
+  function fieldSvg(cells, px, spacingPx) {
+    var blobs = cells.filter(function (c) { return c.rate >= 0.05; }).map(function (c) {
+      var p = px([c.lat, c.lon]);
+      var tier = rainTier(c.rate);
+      // L'opacité sature vite : au-delà de l'averse modérée, plus sombre
+      // n'apprend rien de plus et on ne lit plus les rues dessous.
+      var op = Math.min(0.6, 0.1 + c.rate * 0.1);
+      return '<circle cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1) +
+        '" r="' + (spacingPx * 0.62).toFixed(1) + '" fill="var(--rain-' + Math.max(1, tier) + ')" opacity="' + op.toFixed(2) + '"/>';
+    }).join('');
+
+    if (!blobs) return '';
+    var sd = Math.max(5, spacingPx * 0.34);
+    return '<filter id="rainblur" x="-30%" y="-30%" width="160%" height="160%">' +
+        '<feGaussianBlur stdDeviation="' + sd.toFixed(1) + '"/>' +
+      '</filter>' +
+      '<g filter="url(#rainblur)">' + blobs + '</g>';
+  }
+
   function cellDefs(cells) {
     return cells.map(function (c, i) {
       return '<radialGradient id="cell' + i + '">' +
@@ -225,8 +255,8 @@
     }).join('');
   }
 
-  /** Le calque tracé + marqueurs + cellules, en pixels de la carte. */
-  function overlaySvg(W, H, pxCoords, pxPoints, cells) {
+  /** Le calque nuages + tracé + marqueurs, en pixels de la carte. */
+  function overlaySvg(W, H, pxCoords, pxPoints, cells, rain) {
     var d = pxCoords.map(function (p, i) {
       return (i === 0 ? 'M' : 'L') + p[0].toFixed(1) + ' ' + p[1].toFixed(1);
     }).join(' ');
@@ -239,8 +269,8 @@
     }).join('');
 
     return '<svg class="maplayer" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" ' +
-      'role="img" aria-label="Carte du trajet">' +
-      '<defs>' + cellDefs(cells) + '</defs>' + cellSvg +
+      'role="img" aria-label="Carte du trajet et nuages de pluie">' +
+      '<defs>' + cellDefs(cells) + '</defs>' + cellSvg + (rain || '') +
       '<path d="' + d + '" fill="none" stroke="rgba(255,255,255,.75)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>' +
       '<path d="' + d + '" fill="none" stroke="var(--accent)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>' +
       '<circle cx="' + a[0].toFixed(1) + '" cy="' + a[1].toFixed(1) + '" r="7" fill="#fff" stroke="var(--accent)" stroke-width="3"/>' +
@@ -285,8 +315,16 @@
       }
     }
 
+    // Pas de la grille de pluie, converti en pixels au zoom courant.
+    var rain = '';
+    if (field.available && field.cells && field.cells.length) {
+      var c0 = field.cells[0];
+      var spacing = Math.abs(latToWorld(c0.lat + field.step_lat, z) - latToWorld(c0.lat, z));
+      rain = fieldSvg(field.cells, px, Math.max(8, spacing));
+    }
+
     el.innerHTML = tiles +
-      overlaySvg(W, H, data.coords.map(px), data.points.map(px), data.cells);
+      overlaySvg(W, H, data.coords.map(px), data.points.map(px), data.cells, rain);
 
     // Sans accès Internet (Home Assistant isolé, avion, etc.) aucune tuile ne
     // charge : on bascule sur le fond neutre plutôt que sur un cadre blanc.
@@ -330,9 +368,13 @@
     var id = 'map' + (++mapSeq);
     maps[id] = { coords: coords, points: pts, cells: cells };
 
-    var caption = route.track_ll
-      ? 'Tracé réel · fond de carte © OpenStreetMap'
-      : 'Points de passage · fond de carte © OpenStreetMap';
+    var caption = (route.track_ll ? 'Tracé réel' : 'Points de passage') +
+      ' · fond de carte © OpenStreetMap';
+
+    // Les nuages valent pour l'heure de passage, pas pour maintenant : c'est
+    // toute la différence avec une image radar, et ça doit se lire.
+    if (field.source === 'demo') caption += ' · ☔ averse simulée (test)';
+    else if (field.available) caption += ' · nuages de pluie à l’heure de passage';
 
     return '' +
       '<section class="card mapwrap">' +
@@ -393,6 +435,7 @@
   w.VM_UI = {
     esc: esc, num: num, rainColor: rainColor, rainTier: rainTier, verdictOf: verdictOf,
     verdictCard: verdictCard, profileStrip: profileStrip, windCard: windCard,
-    rainChart: rainChart, radarMap: radarMap, mountMaps: mountMaps, routeSummary: routeSummary
+    rainChart: rainChart, radarMap: radarMap, mountMaps: mountMaps, routeSummary: routeSummary,
+    setField: setField
   };
 })(window, document);

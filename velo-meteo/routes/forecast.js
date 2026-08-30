@@ -254,6 +254,109 @@ async function getWindows(type, stepMin, count) {
   return { type: type, windows: windows, usual: hhmm };
 }
 
+/* ---------- champ de pluie autour du trajet ---------- */
+
+/**
+ * Grille de points couvrant le trajet et ses environs, à un pas d'environ
+ * `stepM` mètres. La grille sert à dessiner les nuages de pluie sur la carte :
+ * les 8 points de passage ne disent que ce qui tombe *sur* le trajet, pas ce
+ * qui arrive à côté.
+ */
+function buildGrid(points, stepM, maxSide) {
+  const lats = points.map(p => p.lat), lons = points.map(p => p.lon);
+  const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+  const minLon = Math.min(...lons), maxLon = Math.max(...lons);
+
+  // Marge autour du trajet : une averse qui arrive compte autant que celle qui
+  // est déjà dessus. La carte cadre plus large que le trajet, la grille aussi.
+  const midLat = (minLat + maxLat) / 2;
+  const degLat = stepM / 111320;
+  const degLon = stepM / (111320 * Math.cos(midLat * Math.PI / 180) || 1);
+
+  const spanLat = (maxLat - minLat) * 1.6 + degLat;
+  const spanLon = (maxLon - minLon) * 1.6 + degLon;
+
+  const nLat = Math.max(3, Math.min(maxSide, Math.round(spanLat / degLat) + 1));
+  const nLon = Math.max(3, Math.min(maxSide, Math.round(spanLon / degLon) + 1));
+
+  const out = [];
+  for (let i = 0; i < nLat; i++) {
+    for (let j = 0; j < nLon; j++) {
+      out.push({
+        lat: +(midLat - spanLat / 2 + (spanLat * i) / (nLat - 1)).toFixed(5),
+        lon: +((minLon + maxLon) / 2 - spanLon / 2 + (spanLon * j) / (nLon - 1)).toFixed(5)
+      });
+    }
+  }
+  return { cells: out, stepLat: spanLat / (nLat - 1), stepLon: spanLon / (nLon - 1) };
+}
+
+/** Point de passage le plus proche d'une case de la grille (distance à plat). */
+function nearestPoint(points, cell) {
+  let best = points[0], bestD = Infinity;
+  points.forEach(p => {
+    const d = (p.lat - cell.lat) ** 2 + (p.lon - cell.lon) ** 2;
+    if (d < bestD) { bestD = d; best = p; }
+  });
+  return best;
+}
+
+// La maille des modèles tourne autour de 2 km ; on échantillonne plus fin que
+// ça. À 1,8 km de pas, une carte de vélotaf ne contient que deux cases et le
+// rendu vire à l'aplat uniforme : ce sont les dégradés qui dessinent le nuage.
+const GRID_STEP_M = 900;
+const GRID_MAX_SIDE = 7;    // 49 points au maximum dans la requête Open-Meteo
+
+/**
+ * Champ de pluie autour du trajet, **à l'heure de passage** — et non à l'heure
+ * courante comme le ferait une image radar. Chaque case prend l'horaire du
+ * point de passage le plus proche : c'est ce qui rend la carte cohérente avec
+ * le verdict et le profil de pluie.
+ */
+async function computeField(route, hhmm) {
+  const grid = buildGrid(route.points, GRID_STEP_M, GRID_MAX_SIDE);
+  const locs = await fetchForecast(grid.cells);
+  const dep = nextDeparture(hhmm, locs[0].utc_offset_seconds || 0);
+
+  const cells = grid.cells.map((c, i) => {
+    const q = locs[i].minutely_15 || {};
+    const near = nearestPoint(route.points, c);
+    const at = new Date(dep.getTime() + near.offset_min * 60000);
+    const qi = (q.time || []).indexOf(isoLocal(at, 15));
+    // precipitation est un cumul sur 15 min : ×4 pour une intensité en mm/h.
+    return { lat: c.lat, lon: c.lon, rate: qi >= 0 ? +((q.precipitation[qi] || 0) * 4).toFixed(2) : 0 };
+  });
+
+  return {
+    cells: cells,
+    step_lat: +grid.stepLat.toFixed(5),
+    step_lon: +grid.stepLon.toFixed(5),
+    at: isoLocal(dep, 15)
+  };
+}
+
+/**
+ * Averse fictive centrée sur le milieu du trajet, pour juger le rendu sans
+ * attendre qu'il pleuve vraiment au-dessus du trajet — ce qui n'arrive jamais
+ * au moment où on développe.
+ */
+function demoField(route) {
+  const grid = buildGrid(route.points, GRID_STEP_M, GRID_MAX_SIDE);
+  const mid = route.points[Math.floor(route.points.length / 2)];
+  const spread = Math.max(grid.stepLat, grid.stepLon) * 1.1;
+
+  const cells = grid.cells.map(c => {
+    // Une averse serrée sur le trajet, une seconde plus faible au nord-ouest :
+    // le but est de voir les bords du nuage, pas de noyer la carte.
+    const d1 = Math.hypot(c.lat - mid.lat, c.lon - mid.lon) / spread;
+    const d2 = Math.hypot(c.lat - (mid.lat + spread * 1.6), c.lon - (mid.lon - spread * 1.6)) / spread;
+    const rate = 9 * Math.exp(-d1 * d1) + 2.5 * Math.exp(-d2 * d2);
+    return { lat: c.lat, lon: c.lon, rate: +rate.toFixed(2) };
+  });
+
+  return { cells, step_lat: +grid.stepLat.toFixed(5), step_lon: +grid.stepLon.toFixed(5), at: null };
+}
+
 /**
  * Enveloppe tolérante utilisée par les routes de l'API : renvoie toujours
  * quelque chose d'affichable. Si aucun trajet n'est configuré, ou si une API
@@ -270,4 +373,21 @@ async function safeTripData(type) {
   }
 }
 
-module.exports = { getTripData, getWindows, safeTripData, invalidate, nextDeparture };
+/** Champ de pluie mis en cache comme le reste : l'écran d'accueil est bavard. */
+async function getField(type) {
+  const trip = store.getTrip();
+  if (!store.isConfigured(trip)) return null;
+
+  const key = 'field|' + type + '|' + (trip.updated_at || '');
+  const hit = cache.get(key);
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.data;
+
+  const data = await computeField(trip.routes[type], type === 'evening' ? trip.evening_time : trip.morning_time);
+  cache.set(key, { at: Date.now(), data: data });
+  return data;
+}
+
+module.exports = {
+  getTripData, getWindows, safeTripData, invalidate, nextDeparture,
+  getField, demoField
+};
