@@ -12,18 +12,24 @@
     });
   }
 
-  /** Palier d'intensité (0 à 4) selon les mm de pluie prévus. */
-  function rainTier(mm) {
-    if (mm <= 0.05) return 0;
-    if (mm < 0.4) return 1;
-    if (mm < 1.0) return 2;
-    if (mm < 2.0) return 3;
+  /**
+   * Palier d'intensité (0 à 4) à partir du taux de pluie en mm/h, sur
+   * l'échelle météo usuelle : bruine < 1, modérée à 2,5, forte au-delà de 7,6.
+   */
+  function rainTier(rate) {
+    if (rate < 0.1) return 0;
+    if (rate < 1.0) return 1;
+    if (rate < 2.5) return 2;
+    if (rate < 7.6) return 3;
     return 4;
   }
 
-  /** Couleur d'un segment selon les mm de pluie prévus. */
-  function rainColor(mm) {
-    return 'var(--rain-' + rainTier(mm) + ')';
+  function rainColor(rate) {
+    return 'var(--rain-' + rainTier(rate) + ')';
+  }
+
+  function num(v, d) {
+    return Number(v).toFixed(d === undefined ? 1 : d).replace('.', ',');
   }
 
   /**
@@ -45,7 +51,7 @@
 
   function verdictSub(weather, v) {
     if (v.key === 'sec') return 'Aucune précipitation attendue sur le trajet.';
-    return weather.peak.mm.toFixed(1).replace('.', ',') + ' mm vers ' + weather.peak.time +
+    return num(weather.peak.rate) + ' mm/h vers ' + weather.peak.time +
       ' · ' + weather.peak.label + ' (' + weather.peak.prob + ' %)';
   }
 
@@ -62,9 +68,9 @@
           '</div>' +
         '</div>' +
         '<div class="verdict-stats">' +
-          '<div class="stat"><b>' + weather.total_mm.toFixed(1).replace('.', ',') + '</b><span>mm cumul</span></div>' +
+          '<div class="stat"><b>' + num(weather.total_mm) + '</b><span>cumul mm</span></div>' +
           '<div class="stat"><b>' + weather.max_prob + ' %</b><span>proba max</span></div>' +
-          '<div class="stat"><b>' + weather.temp_c + '°</b><span>ressenti</span></div>' +
+          '<div class="stat"><b>' + (weather.temp_c === null ? '—' : weather.temp_c + '°') + '</b><span>ressenti</span></div>' +
         '</div>' +
       '</section>';
   }
@@ -74,12 +80,13 @@
 
   function profileStrip(route, weather) {
     var segs = weather.points.map(function (p) {
-      return '<div class="seg t' + rainTier(p.mm) + '" style="background:' + rainColor(p.mm) + '">' +
-        '<span class="lbl">' + (p.mm > 0 ? p.mm.toFixed(1).replace('.', ',') : '·') + '</span></div>';
+      return '<div class="seg t' + rainTier(p.rate) + '" style="background:' + rainColor(p.rate) + '" ' +
+        'title="' + esc(p.label) + ' · ' + p.time + '">' +
+        '<span class="lbl">' + (p.rate >= 0.1 ? num(p.rate) : '·') + '</span></div>';
     }).join('');
 
     var first = weather.points[0], last = weather.points[weather.points.length - 1];
-    var peakTxt = weather.total_mm > 0
+    var peakTxt = weather.max_rate >= 0.1
       ? 'Le plus arrosé : <b>' + esc(weather.peak.label) + '</b> vers ' + weather.peak.time
       : 'Trajet sec de bout en bout.';
 
@@ -87,7 +94,7 @@
       '<section class="card card-pad">' +
         '<div class="card-title">Profil de pluie · ' + esc(route.name) + '</div>' +
         '<div class="profile">' + segs + '</div>' +
-        '<div class="profile-axis"><span>' + first.time + ' départ</span><span>' + last.time + ' arrivée</span></div>' +
+        '<div class="profile-axis"><span>' + first.time + ' départ</span><span>intensité mm/h</span><span>' + last.time + ' arrivée</span></div>' +
         '<div class="profile-peak"><span class="dot"></span><span>' + peakTxt + '</span></div>' +
       '</section>';
   }
@@ -118,7 +125,7 @@
     var W = 340, H = 156, L = 28, R = 30, T = 12, B = 30;
     var pw = W - L - R, ph = H - T - B;
     var pts = weather.points;
-    var maxMm = Math.max(1, Math.ceil(Math.max.apply(null, pts.map(function (p) { return p.mm; }))));
+    var maxMm = Math.max(1, Math.ceil(Math.max.apply(null, pts.map(function (p) { return p.rate; }))));
     var step = pw / pts.length;
     var bw = Math.min(22, step * 0.56);
 
@@ -135,10 +142,10 @@
 
     pts.forEach(function (p, i) {
       var cx = L + step * i + step / 2;
-      var h = (p.mm / maxMm) * ph;
+      var h = (p.rate / maxMm) * ph;
       bars += '<rect x="' + (cx - bw / 2).toFixed(1) + '" y="' + (T + ph - h).toFixed(1) +
         '" width="' + bw.toFixed(1) + '" height="' + Math.max(h, 1.5).toFixed(1) +
-        '" rx="3" fill="' + rainColor(p.mm) + '"/>';
+        '" rx="3" fill="' + rainColor(p.rate) + '"/>';
       var py = T + ph - (p.prob / 100) * ph;
       line += (i === 0 ? 'M' : 'L') + cx.toFixed(1) + ' ' + py.toFixed(1) + ' ';
       dots += '<circle cx="' + cx.toFixed(1) + '" cy="' + py.toFixed(1) + '" r="2.6" fill="var(--accent)"/>';
@@ -159,7 +166,7 @@
           '</svg>' +
         '</div>' +
         '<div class="legend">' +
-          '<span><i style="background:var(--rain-3)"></i>mm de pluie</span>' +
+          '<span><i style="background:var(--rain-3)"></i>intensité (mm/h)</span>' +
           '<span><i style="background:var(--accent);border-radius:99px"></i>probabilité (%)</span>' +
         '</div>' +
       '</section>';
@@ -186,11 +193,16 @@
       '</radialGradient>';
     }).join('');
 
-    var d = route.points.map(function (p, i) {
+    // Le tracé réel (`track`) est bien plus fin que les 8 points de passage :
+    // on l'utilise dès qu'il est disponible.
+    var line = (route.track && route.track.length > 1) ? route.track : route.points;
+    var d = line.map(function (p, i) {
       return (i === 0 ? 'M' : 'L') + (p.x * W).toFixed(1) + ' ' + (p.y * H).toFixed(1);
     }).join(' ');
 
     var a = route.points[0], b = route.points[route.points.length - 1];
+    var caption = route.track ? 'Tracé réel · fond de carte en V2'
+                              : 'Carte simulée · MapLibre + RainViewer en V2';
 
     return '' +
       '<section class="card mapwrap">' +
@@ -202,7 +214,9 @@
           '<circle cx="' + (a.x * W).toFixed(1) + '" cy="' + (a.y * H).toFixed(1) + '" r="7" fill="var(--surface)" stroke="var(--accent)" stroke-width="3"/>' +
           '<circle cx="' + (b.x * W).toFixed(1) + '" cy="' + (b.y * H).toFixed(1) + '" r="7" fill="var(--accent)" stroke="var(--surface)" stroke-width="3"/>' +
         '</svg>' +
-        '<div class="maplabel">Carte simulée · MapLibre + RainViewer en V2</div>' +
+        // En surimpression, l'étiquette masquait le marqueur quand le trajet
+        // arrivait dans ce coin : elle est sous la carte.
+        '<div class="mapfoot">' + esc(caption) + '</div>' +
       '</section>';
   }
 
@@ -220,7 +234,7 @@
   }
 
   w.VM_UI = {
-    esc: esc, rainColor: rainColor, verdictOf: verdictOf,
+    esc: esc, num: num, rainColor: rainColor, rainTier: rainTier, verdictOf: verdictOf,
     verdictCard: verdictCard, profileStrip: profileStrip, windCard: windCard,
     rainChart: rainChart, radarMap: radarMap, routeSummary: routeSummary
   };

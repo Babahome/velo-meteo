@@ -44,12 +44,19 @@ app.use(express.json());
 app.use('/api/route',   require('./routes/route'));
 app.use('/api/weather', require('./routes/weather'));
 app.use('/api/wind',    require('./routes/wind'));
-app.use('/api/trips',   require('./routes/trips'));
+app.use('/api/trip',    require('./routes/trips'));
 app.use('/api/stats',   require('./routes/stats'));
 
 app.get('/api/options', (_req, res) => res.json(readOptions()));
 
-app.get('/health', (_req, res) => res.json({ status: 'ok', version: '0.1.0', mock: true }));
+// Toute route /api inconnue doit répondre en JSON : sans ça, le catch-all
+// plus bas renverrait index.html et le front planterait sur le JSON.parse.
+app.use('/api', (_req, res) => res.status(404).json({ error: 'Route API inconnue' }));
+
+app.get('/health', (_req, res) => {
+  const store = require('./routes/store');
+  res.json({ status: 'ok', version: '0.2.0', configured: store.isConfigured(store.getTrip()) });
+});
 
 // --- Front statique --------------------------------------------------------
 // Pas de cache sur l'app : on itere sur le layout, on veut voir les changements
