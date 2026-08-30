@@ -18,6 +18,7 @@ router.get('/', async (req, res) => {
     duration_min: t.duration_min, distance_km: t.distance_km,
     points: t.points.map(p => ({ i: p.i, time: p.time, label: p.label, lat: p.lat, lon: p.lon, x: p.x, y: p.y })),
     track: null,
+    track_ll: null,
     rain_cells: t.rain_cells
   });
 });

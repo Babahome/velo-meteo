@@ -24,7 +24,10 @@
     offline: false,
     form: null,          // valeurs saisies dans Réglages, conservées entre deux rendus
     saving: false,
-    saveMsg: null
+    saveMsg: null,
+    // Import GPX : le fichier choisi survit aux rendus, l'<input type=file>
+    // étant remis à zéro à chaque réécriture du formulaire.
+    gpx: { direction: 'morning', speed: '18', file: null, busy: false, msg: null }
   };
 
   function currentTrip() {
@@ -285,6 +288,38 @@
     return state.form;
   }
 
+  /** Carte « Importer une trace GPX » de la page Réglages. */
+  function gpxCard() {
+    var g = state.gpx;
+    var msg = g.msg ? '<div class="formmsg ' + g.msg.kind + '">' + esc(g.msg.text) + '</div>' : '';
+    var chosen = g.file
+      ? '<div class="small muted">Fichier choisi : <b>' + esc(g.file.name) + '</b></div>'
+      : '';
+
+    return '<section class="card">' +
+        '<div class="card-pad" style="padding-bottom:6px"><div class="card-title">Importer une trace GPX</div></div>' +
+        '<div class="form">' +
+          '<label class="field"><span>Fichier .gpx</span>' +
+            '<input type="file" name="gpx_file" accept=".gpx,application/gpx+xml,text/xml"></label>' +
+          chosen +
+          // Un select à mi-largeur tronque les deux libellés sur un téléphone.
+          '<label class="field"><span>Sens de la trace</span>' +
+            '<select name="gpx_direction">' +
+              '<option value="morning"' + (g.direction === 'morning' ? ' selected' : '') + '>Aller · domicile → travail</option>' +
+              '<option value="evening"' + (g.direction === 'evening' ? ' selected' : '') + '>Retour · travail → domicile</option>' +
+            '</select></label>' +
+          '<label class="field"><span>Vitesse moyenne (km/h)</span>' +
+            '<input type="number" name="gpx_speed" min="5" max="45" step="1" inputmode="numeric" value="' + esc(g.speed) + '"></label>' +
+          msg +
+          '<button class="btn ghost" data-action="import-gpx"' + (g.busy ? ' disabled' : '') + '>' +
+            (g.busy ? '⏳ Lecture de la trace…' : '📄 Importer cette trace') + '</button>' +
+        '</div>' +
+        '<div class="card-pad"><div class="note">La trace remplace l’itinéraire calculé : mêmes points de passage, mêmes prévisions. ' +
+        'L’autre sens est la trace parcourue à l’envers. La vitesse moyenne ne sert que si la trace n’est pas horodatée — ' +
+        'sinon les horaires viennent du fichier.</div></div>' +
+      '</section>';
+  }
+
   function pageSettings() {
     setSwitch(false);
     return Promise.all([api.options(), api.trip()]).then(function (res) {
@@ -294,11 +329,20 @@
       var f = formValues();
       var t = state.config.trip;
 
+      var leg = function (r) {
+        return num(r.distance_km) + ' km · ' + r.duration_min + ' min' +
+          (r.elevation_gain_m ? ' · +' + r.elevation_gain_m + ' m' : '');
+      };
+
       var resolved = t ? '' +
         '<div class="row"><span class="k">Domicile reconnu</span><span class="v">' + esc(t.home.label) + '</span></div>' +
         '<div class="row"><span class="k">Travail reconnu</span><span class="v">' + esc(t.work.label) + '</span></div>' +
-        '<div class="row"><span class="k">Aller</span><span class="v">' + num(t.routes.morning.distance_km) + ' km · ' + t.routes.morning.duration_min + ' min</span></div>' +
-        '<div class="row"><span class="k">Retour</span><span class="v">' + num(t.routes.evening.distance_km) + ' km · ' + t.routes.evening.duration_min + ' min</span></div>' : '';
+        '<div class="row"><span class="k">Aller</span><span class="v">' + leg(t.routes.morning) + '</span></div>' +
+        '<div class="row"><span class="k">Retour</span><span class="v">' + leg(t.routes.evening) + '</span></div>' +
+        (t.source === 'gpx'
+          ? '<div class="row"><span class="k">Origine</span><span class="v">Trace GPX' +
+            (t.gpx_name ? ' · ' + esc(t.gpx_name) : '') + '</span></div>'
+          : '') : '';
 
       var msg = state.saveMsg
         ? '<div class="formmsg ' + state.saveMsg.kind + '">' + esc(state.saveMsg.text) + '</div>'
@@ -337,6 +381,8 @@
           'Le calcul prend quelques secondes ; il n’a lieu qu’à l’enregistrement.</div></div>' +
         '</section>' +
 
+        gpxCard() +
+
         '<section class="card">' +
           '<div class="card-pad" style="padding-bottom:4px"><div class="card-title">Layout de l’accueil</div></div>' +
           '<div class="opt-list" role="radiogroup">' + opts + '</div>' +
@@ -345,7 +391,7 @@
         '<section class="card">' +
           '<div class="card-pad">' +
             '<div class="card-title">État</div>' +
-            '<div class="small muted">Version 0.2.0 · ' +
+            '<div class="small muted">Version 0.3.0 · ' +
               (state.config.configured ? 'trajet réel configuré' : 'aucun trajet : données fictives') +
               (state.offline ? ' · API injoignable' : '') + '.</div>' +
           '</div>' +
@@ -366,6 +412,7 @@
     view.innerHTML = '<div class="note">Chargement…</div>';
     return ROUTES[path]().then(function (html) {
       view.innerHTML = html;
+      UI.mountMaps(view);   // les tuiles ont besoin de la largeur réelle du conteneur
       w.scrollTo(0, 0);
     }).catch(function (e) {
       view.innerHTML = '<div class="card card-pad">Erreur d’affichage : ' + esc(e && e.message) + '</div>';
@@ -386,8 +433,19 @@
   // Le formulaire est re-généré à chaque rendu : on garde la saisie en mémoire.
   view.addEventListener('input', function (e) {
     var el = e.target;
-    if (!el.name || !state.form) return;
+    if (!el.name) return;
+    if (el.name === 'gpx_speed') { state.gpx.speed = el.value; return; }
+    if (!state.form) return;
     if (Object.prototype.hasOwnProperty.call(state.form, el.name)) state.form[el.name] = el.value;
+  });
+
+  view.addEventListener('change', function (e) {
+    var el = e.target;
+    if (el.name === 'gpx_direction') { state.gpx.direction = el.value; return; }
+    if (el.name !== 'gpx_file') return;
+    state.gpx.file = el.files && el.files[0] ? el.files[0] : null;
+    state.gpx.msg = null;
+    render();   // l'input est vidé au rendu suivant : le nom s'affiche à côté
   });
 
   view.addEventListener('click', function (e) {
@@ -404,7 +462,52 @@
 
     if (btn.getAttribute('data-action') === 'save-trip') saveTrip();
     if (btn.getAttribute('data-action') === 'clear-trip') clearTrip();
+    if (btn.getAttribute('data-action') === 'import-gpx') importGpx();
   });
+
+  function importGpx() {
+    var g = state.gpx;
+    if (!g.file) {
+      g.msg = { kind: 'err', text: 'Choisis d’abord un fichier .gpx.' };
+      return render();
+    }
+
+    var f = formValues();
+    var qs = '?direction=' + encodeURIComponent(g.direction) +
+             '&speed_kmh=' + encodeURIComponent(g.speed) +
+             '&morning_time=' + encodeURIComponent(f.morning_time) +
+             '&evening_time=' + encodeURIComponent(f.evening_time);
+
+    g.busy = true;
+    g.msg = { kind: 'info', text: 'Lecture de la trace et géocodage du départ…' };
+    render();
+
+    // Le fichier part tel quel : l'encapsuler en JSON gonflerait une trace de
+    // plusieurs mégaoctets pour rien.
+    fetch('/api/trip/gpx' + qs, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/gpx+xml' },
+      body: g.file
+    }).then(function (r) {
+      return r.json().then(function (j) {
+        if (!r.ok) throw new Error(j && j.error ? j.error : 'HTTP ' + r.status);
+        return j;
+      });
+    }).then(function (res) {
+      state.config = res;
+      state.form = null;
+      var im = res.imported;
+      g.file = null;
+      g.msg = { kind: 'ok', text: 'Trace importée : ' + num(im.distance_km) + ' km, ' + im.duration_min + ' min ' +
+        (im.timed ? '(durée lue dans la trace)' : '(estimés à ' + g.speed + ' km/h)') +
+        (im.elevation_gain_m ? ' · +' + im.elevation_gain_m + ' m de dénivelé' : '') + '.' };
+    }).catch(function (err) {
+      g.msg = { kind: 'err', text: err.message || String(err) };
+    }).then(function () {
+      g.busy = false;
+      render();
+    });
+  }
 
   function saveTrip() {
     var f = formValues();

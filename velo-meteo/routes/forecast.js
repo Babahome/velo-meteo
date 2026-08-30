@@ -158,6 +158,7 @@ async function compute(type) {
       distance_km: route.distance_km,
       points: route.points.map(p => ({ i: p.i, time: points[p.i].time, label: p.label, lat: p.lat, lon: p.lon, x: p.x, y: p.y })),
       track: route.track,
+      track_ll: route.track_ll || null,
       rain_cells: []
     },
     weather: {

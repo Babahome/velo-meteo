@@ -9,9 +9,10 @@
  */
 'use strict';
 
-const UA = 'velo-meteo-hassio-addon/0.2.0 (Home Assistant add-on; personal use)';
+const UA = 'velo-meteo-hassio-addon/0.3.0 (Home Assistant add-on; personal use)';
 
 const NOMINATIM = 'https://nominatim.openstreetmap.org/search';
+const REVERSE   = 'https://nominatim.openstreetmap.org/reverse';
 const OSRM      = 'https://routing.openstreetmap.de/routed-bike/route/v1/bike';
 
 const TIMEOUT_MS = 15000;
@@ -51,6 +52,18 @@ async function geocode(query) {
     lat: parseFloat(rows[0].lat),
     lon: parseFloat(rows[0].lon)
   };
+}
+
+/**
+ * Nom d'un lieu à partir de ses coordonnées : une trace GPX ne porte aucune
+ * adresse, mais « Départ · Rue de la Paix » reste plus parlant que « Départ ».
+ * Un échec n'est pas bloquant, l'appelant retombe sur un libellé générique.
+ */
+async function reverseGeocode(lat, lon) {
+  const url = REVERSE + '?format=jsonv2&zoom=17&addressdetails=0&lat=' + lat + '&lon=' + lon;
+  const row = await getJson(url, { 'Accept-Language': 'fr' });
+  if (!row || !row.display_name) throw new Error('Lieu introuvable');
+  return { query: lat + ',' + lon, label: shortLabel(row.display_name), lat: lat, lon: lon };
 }
 
 /* ---------- géométrie ---------- */
@@ -156,8 +169,47 @@ function labelFor(pt, idx, last, from, to) {
 const NB_POINTS = 8;
 const MAP_ASPECT = 210 / 340; // doit rester aligné sur le viewBox de la carte SVG
 
-async function buildRoute(from, to, nbPoints) {
+/** Longueur d'un tracé, en mètres. */
+function trackLength(coords) {
+  let d = 0;
+  for (let i = 1; i < coords.length; i++) d += haversine(coords[i - 1], coords[i]);
+  return d;
+}
+
+/**
+ * Met un tracé en forme pour l'app : points de passage, projection carte et
+ * tracé allégé. Commun à l'itinéraire OSRM et à une trace GPX importée.
+ */
+function assemble(coords, steps, distance, duration, from, to, nbPoints) {
   const n = nbPoints || NB_POINTS;
+  const short = s => String(s).split(',')[0].trim();
+  const pts = sample(coords, steps, distance, duration, n);
+  const last = pts.length - 1;
+
+  const xyPts   = project(pts.map(p => [p.lat, p.lon]).concat(coords), MAP_ASPECT);
+  const xyTrack = xyPts.slice(pts.length);
+
+  // Le tracé est stocké dans /data et renvoyé à chaque affichage : une trace
+  // GPX brute fait des dizaines de milliers de points, ~300 suffisent à l'œil.
+  const stride = Math.max(3, Math.ceil(coords.length / 300));
+  const keep = (_, i) => i % stride === 0 || i === coords.length - 1;
+
+  return {
+    distance_km: +(distance / 1000).toFixed(1),
+    duration_min: Math.round(duration / 60),
+    points: pts.map((p, i) => Object.assign({}, p, {
+      label: labelFor(p, i, last, short(from.label), short(to.label)),
+      x: xyPts[i].x,
+      y: xyPts[i].y
+    })),
+    track: xyTrack.filter(keep),
+    // Le tracé en coordonnées réelles : la carte à tuiles le reprojette
+    // elle-même en Mercator, `track` (0..1) ne lui sert à rien.
+    track_ll: coords.filter(keep).map(c => [+c[0].toFixed(5), +c[1].toFixed(5)])
+  };
+}
+
+async function buildRoute(from, to, nbPoints) {
   const url = OSRM + '/' + from.lon + ',' + from.lat + ';' + to.lon + ',' + to.lat +
               '?overview=full&geometries=geojson&steps=true&annotations=false';
   const data = await getJson(url);
@@ -169,23 +221,19 @@ async function buildRoute(from, to, nbPoints) {
   const coords = r.geometry.coordinates.map(c => [c[1], c[0]]); // [lon,lat] -> [lat,lon]
   const steps = (r.legs && r.legs[0] && r.legs[0].steps) || [];
 
-  const short = s => String(s).split(',')[0].trim();
-  const pts = sample(coords, steps, r.distance, r.duration, n);
-  const last = pts.length - 1;
-
-  const xyPts   = project(pts.map(p => [p.lat, p.lon]).concat(coords), MAP_ASPECT);
-  const xyTrack = xyPts.slice(pts.length);
-
-  return {
-    distance_km: +(r.distance / 1000).toFixed(1),
-    duration_min: Math.round(r.duration / 60),
-    points: pts.map((p, i) => Object.assign({}, p, {
-      label: labelFor(p, i, last, short(from.label), short(to.label)),
-      x: xyPts[i].x,
-      y: xyPts[i].y
-    })),
-    track: xyTrack.filter((_, i) => i % 3 === 0 || i === xyTrack.length - 1)
-  };
+  return assemble(coords, steps, r.distance, r.duration, from, to, nbPoints);
 }
 
-module.exports = { geocode, buildRoute, bearing, NB_POINTS };
+/**
+ * Itinéraire à partir d'un tracé déjà connu (trace GPX) : aucun routeur n'est
+ * appelé, et faute de manœuvres OSRM les points de passage sont nommés par
+ * leur kilomètre.
+ */
+function buildRouteFromTrack(coords, from, to, durationSec, nbPoints) {
+  if (!Array.isArray(coords) || coords.length < 2) throw new Error('Tracé vide');
+  const distance = trackLength(coords);
+  if (distance < 50) throw new Error('Tracé trop court (moins de 50 m)');
+  return assemble(coords, [], distance, durationSec, from, to, nbPoints);
+}
+
+module.exports = { geocode, reverseGeocode, buildRoute, buildRouteFromTrack, trackLength, bearing, NB_POINTS };

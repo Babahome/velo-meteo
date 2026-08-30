@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.3.0 — Fond de carte, trace GPX, icône PWA
+
+- **Fond de carte** : les tuiles OpenStreetMap remplacent la grille SVG. Le tracé se
+  lit enfin par rapport aux rues et aux repères réels. Pas de MapLibre : la carte n'est
+  ni déplaçable ni zoomable, poser les tuiles à la main coûte ~70 lignes contre ~800 ko
+  de bibliothèque dans l'image Docker.
+  - Cadrage automatique sur le trajet, projection Web Mercator, zoom entier pour garder
+    les tuiles nettes.
+  - Les tuiles sont assombries dans le thème sombre — une carte OSM brute éblouit.
+  - Sans accès Internet, la carte retombe sur le fond neutre et le dit ; le tracé et les
+    marqueurs restent affichés.
+- **Import de trace GPX** (Réglages) : une trace remplace l'itinéraire calculé, avec les
+  mêmes points de passage et les mêmes prévisions. Utile pour les trajets que le routeur
+  ne trouve pas comme on les fait vraiment.
+  - `trkpt`, à défaut `rtept` puis `wpt` ; préfixes de namespace et ordre des attributs
+    indifférents ; segments concaténés.
+  - Horaires de passage lus dans la trace si elle est horodatée, sinon déduits d'une
+    vitesse moyenne saisie.
+  - Départ et arrivée nommés par géocodage inverse Nominatim ; son échec n'empêche pas
+    l'import.
+  - Dénivelé positif cumulé lu dans les `<ele>` et affiché dans Réglages.
+  - L'autre sens est la trace parcourue à l'envers — approximation assumée, préférable à
+    mélanger une trace vécue et un itinéraire calculé sur le même trajet.
+- **Icône du raccourci PWA** : le manifest ne déclarait aucune icône, l'écran d'accueil
+  affichait donc une capture de la page. Icônes 192 et 512, variantes *maskable* (fond à
+  bord perdu, contenu dans la zone sûre) et `apple-touch-icon` pour iOS, qui ignore le
+  manifest.
+
+Le tracé stocké est ramené à ~300 points quelle que soit sa taille d'origine : une trace
+GPX brute en compte des dizaines de milliers, illisibles à l'œil et lourds dans `/data`.
+
 ## 0.2.0 — Trajet réel et vraies prévisions
 
 Saisie du trajet et bascule sur les données réelles. Le mode maquette reste disponible

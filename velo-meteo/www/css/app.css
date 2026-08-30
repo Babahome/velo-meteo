@@ -134,6 +134,17 @@ svg.chart,svg.map{display:block;width:100%;height:auto}
 .mapfoot{font-size:11px;color:var(--text-dim);padding:8px 12px;border-top:1px solid var(--line)}
 .mapwrap{position:relative}
 
+/* Fond de carte : tuiles OSM posees en absolu, tracé en SVG par-dessus.
+   La hauteur est fixée en JS, une fois la largeur réelle connue. */
+.mapcanvas{position:relative;overflow:hidden;background:var(--surface-2);min-height:120px}
+.mapcanvas .tile{position:absolute;width:256px;height:256px;display:block;border:0}
+.mapcanvas.notiles .tile{display:none}
+.mapcanvas .maplayer{position:absolute;inset:0;width:100%;height:100%}
+@media (prefers-color-scheme:dark){
+  /* Les tuiles OSM sont claires : sans ça, la carte éblouit dans le thème sombre. */
+  .mapcanvas .tile{filter:invert(1) hue-rotate(180deg) brightness(.85) contrast(.9)}
+}
+
 /* --- Boutons / accordeons ------------------------------------------ */
 .btn{
   display:flex;align-items:center;justify-content:center;gap:8px;width:100%;
@@ -230,7 +241,18 @@ svg.chart,svg.map{display:block;width:100%;height:auto}
   font-size:16px; /* en dessous de 16px, iOS zoome au focus */
   appearance:none
 }
-.field input:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:transparent}
+.field input:focus,.field select:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:transparent}
+.field select{
+  font:inherit;color:var(--text);background:var(--surface-2);
+  border:1px solid var(--line);border-radius:12px;padding:12px;min-height:48px;width:100%
+}
+/* Le bouton natif de l'input file est illisible sur mobile en thème sombre. */
+.field input[type=file]{padding:9px 12px;font-size:14px}
+.field input[type=file]::file-selector-button{
+  font:inherit;font-weight:700;font-size:13px;color:var(--text);
+  background:var(--surface);border:1px solid var(--line);border-radius:9px;
+  padding:7px 11px;margin-right:10px;cursor:pointer
+}
 .field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .btn[disabled]{opacity:.6}
 .formmsg{font-size:13px;border-radius:10px;padding:10px 12px;line-height:1.35}

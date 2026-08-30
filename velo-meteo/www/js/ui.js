@@ -1,7 +1,7 @@
 /* Vélo Météo - briques d'affichage (aucune dépendance externe).
    Les graphes et la carte sont du SVG écrit à la main : en V2 ils seront
    remplacés par Recharts / MapLibre sans changer le layout des pages. */
-(function (w) {
+(function (w, d) {
   'use strict';
 
   /* ---------- utilitaires ---------- */
@@ -172,51 +172,208 @@
       '</section>';
   }
 
-  /* ---------- carte radar (simulée) ---------- */
+  /* ---------- carte : fond de tuiles OSM + tracé ---------- */
+  /* Pas de MapLibre : la carte n'est ni déplaçable ni zoomable, elle cadre le
+     trajet et c'est tout. Poser les tuiles à la main coûte ~70 lignes contre
+     ~800 ko de bibliothèque à embarquer dans l'image Docker. */
 
-  function radarMap(route) {
-    var W = 340, H = 210;
-    var grid = '';
-    for (var gx = 0; gx <= W; gx += 34) grid += '<line x1="' + gx + '" y1="0" x2="' + gx + '" y2="' + H + '" stroke="var(--line)" stroke-width="0.5"/>';
-    for (var gy = 0; gy <= H; gy += 34) grid += '<line x1="0" y1="' + gy + '" x2="' + W + '" y2="' + gy + '" stroke="var(--line)" stroke-width="0.5"/>';
+  var TILE_URL  = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+  var TILE_SIZE = 256;
+  var MAX_ZOOM  = 17;
+  var MAP_RATIO = 210 / 340;  // hauteur / largeur de la carte
+  var MAP_PAD   = 0.12;       // le tracé ne doit pas toucher les bords
 
-    var cells = (route.rain_cells || []).map(function (c, i) {
-      return '<circle cx="' + (c.x * W).toFixed(1) + '" cy="' + (c.y * H).toFixed(1) +
-        '" r="' + (c.r * W).toFixed(1) + '" fill="url(#cell' + i + ')"/>';
-    }).join('');
+  var mapSeq = 0;
+  var maps = {};   // id -> données de la carte, en attente d'insertion dans le DOM
 
-    var defs = (route.rain_cells || []).map(function (c, i) {
+  function lonToWorld(lon, z) {
+    return ((lon + 180) / 360) * TILE_SIZE * Math.pow(2, z);
+  }
+
+  function latToWorld(lat, z) {
+    var s = Math.max(-0.9999, Math.min(0.9999, Math.sin(lat * Math.PI / 180)));
+    return (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * TILE_SIZE * Math.pow(2, z);
+  }
+
+  /** Zoom le plus serré auquel le trajet tient encore dans W x H pixels. */
+  function fitZoom(coords, W, H) {
+    for (var z = MAX_ZOOM; z > 2; z--) {
+      var xs = coords.map(function (c) { return lonToWorld(c[1], z); });
+      var ys = coords.map(function (c) { return latToWorld(c[0], z); });
+      var dx = Math.max.apply(null, xs) - Math.min.apply(null, xs);
+      var dy = Math.max.apply(null, ys) - Math.min.apply(null, ys);
+      if (dx <= W * (1 - MAP_PAD) && dy <= H * (1 - MAP_PAD)) return z;
+    }
+    return 3;
+  }
+
+  /** Coordonnées du tracé : le vrai tracé si on l'a, sinon les points de passage. */
+  function trackCoords(route) {
+    if (route.track_ll && route.track_ll.length > 1) return route.track_ll;
+    return (route.points || [])
+      .filter(function (p) { return typeof p.lat === 'number' && typeof p.lon === 'number'; })
+      .map(function (p) { return [p.lat, p.lon]; });
+  }
+
+  function cellDefs(cells) {
+    return cells.map(function (c, i) {
       return '<radialGradient id="cell' + i + '">' +
         '<stop offset="0%" stop-color="var(--rain-4)" stop-opacity="' + (c.intensity * 0.85).toFixed(2) + '"/>' +
         '<stop offset="60%" stop-color="var(--rain-2)" stop-opacity="' + (c.intensity * 0.45).toFixed(2) + '"/>' +
         '<stop offset="100%" stop-color="var(--rain-1)" stop-opacity="0"/>' +
       '</radialGradient>';
     }).join('');
+  }
 
-    // Le tracé réel (`track`) est bien plus fin que les 8 points de passage :
-    // on l'utilise dès qu'il est disponible.
+  /** Le calque tracé + marqueurs + cellules, en pixels de la carte. */
+  function overlaySvg(W, H, pxCoords, pxPoints, cells) {
+    var d = pxCoords.map(function (p, i) {
+      return (i === 0 ? 'M' : 'L') + p[0].toFixed(1) + ' ' + p[1].toFixed(1);
+    }).join(' ');
+
+    var a = pxPoints[0], b = pxPoints[pxPoints.length - 1];
+
+    var cellSvg = cells.map(function (c, i) {
+      return '<circle cx="' + (c.x * W).toFixed(1) + '" cy="' + (c.y * H).toFixed(1) +
+        '" r="' + (c.r * W).toFixed(1) + '" fill="url(#cell' + i + ')"/>';
+    }).join('');
+
+    return '<svg class="maplayer" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" ' +
+      'role="img" aria-label="Carte du trajet">' +
+      '<defs>' + cellDefs(cells) + '</defs>' + cellSvg +
+      '<path d="' + d + '" fill="none" stroke="rgba(255,255,255,.75)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>' +
+      '<path d="' + d + '" fill="none" stroke="var(--accent)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>' +
+      '<circle cx="' + a[0].toFixed(1) + '" cy="' + a[1].toFixed(1) + '" r="7" fill="#fff" stroke="var(--accent)" stroke-width="3"/>' +
+      '<circle cx="' + b[0].toFixed(1) + '" cy="' + b[1].toFixed(1) + '" r="7" fill="var(--accent)" stroke="#fff" stroke-width="3"/>' +
+    '</svg>';
+  }
+
+  /**
+   * Pose les tuiles et le tracé dans un conteneur déjà inséré dans le DOM :
+   * la largeur réelle n'est connue qu'à ce moment-là, et c'est elle qui décide
+   * du zoom et du nombre de tuiles.
+   */
+  function mountMap(el) {
+    var data = maps[el.getAttribute('data-map')];
+    if (!data) return;
+
+    var W = Math.round(el.clientWidth);
+    if (!W) return;                                  // encore replié dans un <details>
+    if (el.getAttribute('data-w') === String(W)) return;  // déjà monté à cette taille
+    el.setAttribute('data-w', String(W));
+
+    var H = Math.round(W * MAP_RATIO);
+    el.style.height = H + 'px';
+
+    var z = fitZoom(data.coords, W, H);
+    var xs = data.coords.map(function (c) { return lonToWorld(c[1], z); });
+    var ys = data.coords.map(function (c) { return latToWorld(c[0], z); });
+    var originX = (Math.min.apply(null, xs) + Math.max.apply(null, xs)) / 2 - W / 2;
+    var originY = (Math.min.apply(null, ys) + Math.max.apply(null, ys)) / 2 - H / 2;
+
+    var px = function (c) { return [lonToWorld(c[1], z) - originX, latToWorld(c[0], z) - originY]; };
+    var n = Math.pow(2, z);
+
+    var tiles = '';
+    for (var tx = Math.floor(originX / TILE_SIZE); tx <= Math.floor((originX + W) / TILE_SIZE); tx++) {
+      for (var ty = Math.floor(originY / TILE_SIZE); ty <= Math.floor((originY + H) / TILE_SIZE); ty++) {
+        if (ty < 0 || ty >= n) continue;
+        var wx = ((tx % n) + n) % n;   // la longitude s'enroule, pas la latitude
+        tiles += '<img class="tile" alt="" decoding="async" ' +
+          'style="left:' + (tx * TILE_SIZE - originX).toFixed(1) + 'px;top:' + (ty * TILE_SIZE - originY).toFixed(1) + 'px" ' +
+          'src="' + TILE_URL.replace('{z}', z).replace('{x}', wx).replace('{y}', ty) + '">';
+      }
+    }
+
+    el.innerHTML = tiles +
+      overlaySvg(W, H, data.coords.map(px), data.points.map(px), data.cells);
+
+    // Sans accès Internet (Home Assistant isolé, avion, etc.) aucune tuile ne
+    // charge : on bascule sur le fond neutre plutôt que sur un cadre blanc.
+    var imgs = el.querySelectorAll('img.tile');
+    var failed = 0;
+    Array.prototype.forEach.call(imgs, function (img) {
+      img.addEventListener('error', function () {
+        if (++failed >= imgs.length) {
+          el.classList.add('notiles');
+          var foot = el.parentNode.querySelector('.mapfoot');
+          if (foot) foot.textContent = 'Fond de carte indisponible (pas d’accès Internet) · tracé réel';
+        }
+      });
+    });
+  }
+
+  /** À appeler après chaque innerHTML : les cartes ne peuvent se calculer qu'insérées. */
+  function mountMaps(root) {
+    Array.prototype.forEach.call((root || d).querySelectorAll('.mapcanvas[data-map]'), function (el) {
+      mountMap(el);
+      // Le layout C range la carte dans un <details> replié (largeur 0) et
+      // l'orientation du téléphone change la largeur : on remonte à chaque fois.
+      if (w.ResizeObserver && !el._ro) {
+        el._ro = new w.ResizeObserver(function () { mountMap(el); });
+        el._ro.observe(el);
+      }
+    });
+  }
+
+  function radarMap(route) {
+    var coords = trackCoords(route);
+    var cells = route.rain_cells || [];
+
+    // Sans coordonnées exploitables, on garde l'ancienne carte schématique.
+    if (coords.length < 2) return schematicMap(route);
+
+    var pts = (route.points || []).filter(function (p) { return typeof p.lat === 'number'; })
+                                  .map(function (p) { return [p.lat, p.lon]; });
+    if (pts.length < 2) pts = [coords[0], coords[coords.length - 1]];
+
+    var id = 'map' + (++mapSeq);
+    maps[id] = { coords: coords, points: pts, cells: cells };
+
+    var caption = route.track_ll
+      ? 'Tracé réel · fond de carte © OpenStreetMap'
+      : 'Points de passage · fond de carte © OpenStreetMap';
+
+    return '' +
+      '<section class="card mapwrap">' +
+        '<div class="mapcanvas" data-map="' + id + '"></div>' +
+        // En surimpression, l'étiquette masquait le marqueur quand le trajet
+        // arrivait dans ce coin : elle est sous la carte.
+        '<div class="mapfoot">' + esc(caption) + '</div>' +
+      '</section>';
+  }
+
+  /** Repli sans coordonnées : la grille schématique de la V1. */
+  function schematicMap(route) {
+    var W = 340, H = 210;
+    var grid = '';
+    for (var gx = 0; gx <= W; gx += 34) grid += '<line x1="' + gx + '" y1="0" x2="' + gx + '" y2="' + H + '" stroke="var(--line)" stroke-width="0.5"/>';
+    for (var gy = 0; gy <= H; gy += 34) grid += '<line x1="0" y1="' + gy + '" x2="' + W + '" y2="' + gy + '" stroke="var(--line)" stroke-width="0.5"/>';
+
+    var cells = route.rain_cells || [];
+    var cellSvg = cells.map(function (c, i) {
+      return '<circle cx="' + (c.x * W).toFixed(1) + '" cy="' + (c.y * H).toFixed(1) +
+        '" r="' + (c.r * W).toFixed(1) + '" fill="url(#cell' + i + ')"/>';
+    }).join('');
+
     var line = (route.track && route.track.length > 1) ? route.track : route.points;
     var d = line.map(function (p, i) {
       return (i === 0 ? 'M' : 'L') + (p.x * W).toFixed(1) + ' ' + (p.y * H).toFixed(1);
     }).join(' ');
 
     var a = route.points[0], b = route.points[route.points.length - 1];
-    var caption = route.track ? 'Tracé réel · fond de carte en V2'
-                              : 'Carte simulée · MapLibre + RainViewer en V2';
 
     return '' +
       '<section class="card mapwrap">' +
-        '<svg class="map" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Carte du trajet et cellules de pluie">' +
-          '<defs>' + defs + '</defs>' +
-          '<rect width="' + W + '" height="' + H + '" fill="var(--surface-2)"/>' + grid + cells +
+        '<svg class="map" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Carte schématique du trajet">' +
+          '<defs>' + cellDefs(cells) + '</defs>' +
+          '<rect width="' + W + '" height="' + H + '" fill="var(--surface-2)"/>' + grid + cellSvg +
           '<path d="' + d + '" fill="none" stroke="rgba(0,0,0,.25)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>' +
           '<path d="' + d + '" fill="none" stroke="var(--accent)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>' +
           '<circle cx="' + (a.x * W).toFixed(1) + '" cy="' + (a.y * H).toFixed(1) + '" r="7" fill="var(--surface)" stroke="var(--accent)" stroke-width="3"/>' +
           '<circle cx="' + (b.x * W).toFixed(1) + '" cy="' + (b.y * H).toFixed(1) + '" r="7" fill="var(--accent)" stroke="var(--surface)" stroke-width="3"/>' +
         '</svg>' +
-        // En surimpression, l'étiquette masquait le marqueur quand le trajet
-        // arrivait dans ce coin : elle est sous la carte.
-        '<div class="mapfoot">' + esc(caption) + '</div>' +
+        '<div class="mapfoot">Carte schématique · coordonnées indisponibles</div>' +
       '</section>';
   }
 
@@ -236,6 +393,6 @@
   w.VM_UI = {
     esc: esc, num: num, rainColor: rainColor, rainTier: rainTier, verdictOf: verdictOf,
     verdictCard: verdictCard, profileStrip: profileStrip, windCard: windCard,
-    rainChart: rainChart, radarMap: radarMap, routeSummary: routeSummary
+    rainChart: rainChart, radarMap: radarMap, mountMaps: mountMaps, routeSummary: routeSummary
   };
-})(window);
+})(window, document);

@@ -6,7 +6,7 @@ Deux modes, selon qu'un trajet est configuré ou non :
 
 | | Sans trajet configuré | Avec trajet configuré |
 |---|---|---|
-| Itinéraire | Trajet fictif Paris | Ton itinéraire vélo réel (OSRM) |
+| Itinéraire | Trajet fictif Paris | Ton itinéraire vélo réel (OSRM) ou ta trace GPX |
 | Météo | Données figées | Prévisions réelles (Open-Meteo) |
 | Bandeau en haut | « Maquette · données fictives » | « Données réelles · Open-Meteo » |
 
@@ -47,8 +47,12 @@ http://<ip-de-ton-home-assistant>:8100
 ### Sur le téléphone
 
 Ouvrir l'URL dans Chrome/Safari, puis **Ajouter à l'écran d'accueil** : le `manifest.json`
-fait démarrer l'app en plein écran, sans barre d'adresse. Aucun *service worker* n'est
-embarqué, chaque ouverture recharge la dernière version servie par l'add-on.
+fait démarrer l'app en plein écran, sans barre d'adresse, avec l'icône du vélo sous la
+pluie. Aucun *service worker* n'est embarqué, chaque ouverture recharge la dernière
+version servie par l'add-on.
+
+> Un raccourci créé avant la 0.3.0 garde l'ancienne icône (une capture de la page) :
+> le supprimer et le recréer suffit.
 
 ---
 
@@ -77,6 +81,24 @@ consultation des prévisions bouge.
 
 **Revenir aux données fictives** efface le trajet enregistré et repasse en mode maquette.
 
+### Importer une trace GPX
+
+Réglages → *Importer une trace GPX*, pour les trajets que le routeur ne trouve pas comme
+on les fait vraiment (raccourci par un parc, passage vélo que la carte ignore, détour
+volontaire). La trace remplace l'itinéraire calculé : mêmes points de passage, mêmes
+prévisions, même carte.
+
+1. Choisir le fichier `.gpx` (export Strava, Komoot, Garmin, OsmAnd…).
+2. Indiquer le **sens de la trace** — aller ou retour. L'autre sens est la trace parcourue
+   à l'envers : approximation assumée, les sens uniques diffèrent souvent au retour, mais
+   préférable à mélanger une trace vécue et un itinéraire calculé sur le même trajet.
+3. La **vitesse moyenne** ne sert que si la trace n'est pas horodatée. Une trace
+   enregistrée à vélo l'est ; une trace construite dans un planificateur ne l'est pas.
+
+Le départ et l'arrivée sont nommés par géocodage inverse Nominatim ; si Nominatim est
+indisponible l'import aboutit quand même, avec des libellés génériques. Les horaires de
+départ restent ceux du formulaire au-dessus.
+
 ### Les options de l'add-on
 
 Onglet **Configuration** dans Home Assistant. Elles servent de **valeurs par défaut** du
@@ -101,6 +123,13 @@ formulaire ; ce qui est saisi dans l'app prend le dessus et survit aux redémarr
 | **Créneaux** | Les départs possibles autour de l'heure habituelle, classés par score. |
 | **Historique** | Trois semaines de trajets secs / mouillés — **encore fictif**. |
 | **Réglages** | Trajet, horaires, variante de layout. |
+
+### La carte
+
+Fond de tuiles **OpenStreetMap**, cadré automatiquement sur le trajet, avec le tracé réel
+par-dessus. Elle n'est ni déplaçable ni zoomable : c'est une vue du trajet, pas une carte
+à explorer. Dans le thème sombre les tuiles sont assombries — une carte OSM brute éblouit
+la nuit. Sans accès Internet, seul le tracé reste, sur fond neutre, et la légende le dit.
 
 ### Les trois variantes de l'écran d'accueil
 
@@ -140,6 +169,7 @@ velo-meteo/
 ├─ routes/
 │  ├─ store.js      persistance /data/velo-meteo.json (écriture atomique)
 │  ├─ geo.js        géocodage Nominatim, itinéraire OSRM, projection carte
+│  ├─ gpx.js        lecture d'une trace GPX (points, horodatage, altitude)
 │  ├─ forecast.js   Open-Meteo, assemblage, cache 5 min, créneaux
 │  ├─ mock-data.js  jeu de données fictif (repli)
 │  ├─ route.js      tracé + points de passage
@@ -149,10 +179,12 @@ velo-meteo/
 │  └─ trips.js      configuration du trajet (CRUD)
 └─ www/
    ├─ index.html    coquille + barre d'onglets
+   ├─ manifest.json PWA : nom, couleurs, icônes du raccourci
+   ├─ icons/        icônes 192/512, maskable, apple-touch (dérivées de icon.png)
    ├─ css/app.css   thème clair et sombre, safe areas, contraste extérieur
    └─ js/
       ├─ mock.js    données de repli si l'API est injoignable
-      ├─ ui.js      verdict, profil, vent, graphe SVG, carte SVG
+      ├─ ui.js      verdict, profil, vent, graphe SVG, carte à tuiles
       └─ app.js     routeur par hash, les 4 pages, les 3 variantes
 ```
 
@@ -163,6 +195,7 @@ velo-meteo/
 | [Nominatim](https://nominatim.openstreetmap.org) | Géocodage des adresses | À l'enregistrement du trajet |
 | [OSRM](https://routing.openstreetmap.de) (profil vélo, FOSSGIS) | Itinéraire | À l'enregistrement du trajet |
 | [Open-Meteo](https://open-meteo.com) | Pluie, vent, ressenti | À l'affichage, cache 5 min |
+| [Tuiles OSM](https://tile.openstreetmap.org) | Fond de carte | À chaque affichage de la carte |
 
 Aucune clé d'API n'est nécessaire. Nominatim impose 1 requête/seconde et un User-Agent
 identifiant l'application : les deux sont respectés, et l'appel n'a lieu qu'à
@@ -174,7 +207,8 @@ l'enregistrement, jamais en boucle. Données © contributeurs OpenStreetMap.
 |---|---|---|
 | React + Vite | HTML/CSS/JS vanilla | Pas d'étape de build : image Docker construite en quelques secondes sur le Pi, et une modif de layout est visible après un simple redémarrage. Aligné sur `sudoku` et `kitchencore`. |
 | Recharts | Graphe SVG écrit à la main | ~60 lignes, aucune dépendance. |
-| MapLibre GL JS | Carte SVG, tracé réel projeté | Le tracé est exact ; il manque le fond de carte, qui viendra avec MapLibre + tuiles RainViewer. |
+| MapLibre GL JS | Tuiles OSM posées à la main + calque SVG | La carte n'est ni déplaçable ni zoomable : elle cadre le trajet, point. ~70 lignes contre ~800 ko de bibliothèque dans l'image Docker. |
+| Une lib GPX | Lecture à l'expression régulière | Un GPX est un XML plat dont on n'exploite que `trkpt`, `ele` et `time`. Ajouter un parseur XML complet à une image qui ne contient qu'express pour quatre balises ne se justifie pas. |
 | SQLite (`better-sqlite3`) | JSON dans `/data` | Compilation native très lente sur armv7/aarch64 pour un volume de données minuscule. |
 
 ---
@@ -192,6 +226,7 @@ Toutes les routes renvoient `source: "live"` ou `"mock"`, et `error` quand un re
 | `GET /api/stats/history` | 21 jours de trajets secs / mouillés (fictif) |
 | `GET /api/trip` | Trajet configuré, ou `{ configured: false }` |
 | `POST /api/trip` | Géocode et calcule les itinéraires. Corps : `home_address`, `work_address`, `morning_time`, `evening_time` |
+| `POST /api/trip/gpx` | Importe une trace GPX. Corps : le fichier brut. Query : `direction`, `speed_kmh`, `morning_time`, `evening_time` |
 | `PUT /api/trip/times` | Change les horaires sans recalculer l'itinéraire |
 | `DELETE /api/trip` | Efface le trajet, retour au mode maquette |
 | `GET /api/options` | Options de l'add-on |
@@ -200,8 +235,9 @@ Toutes les routes renvoient `source: "live"` ou `"mock"`, et `error` quand un re
 ## Ce qui reste à faire
 
 - **Historique réel** : enregistrer chaque trajet dans `/data` au fil des jours.
-- **Fond de carte** : MapLibre + tuiles de pluie RainViewer, à la place de la carte SVG.
+- **Radar de pluie** : superposer les tuiles RainViewer au fond de carte. Les cellules de
+  pluie ne s'affichent aujourd'hui qu'en mode maquette.
 - **Notifications** : push via `notify_service` quand le seuil de pluie est dépassé avant
   le départ, en utilisant `ha_long_lived_token`.
 - **Trajets multiples** : la structure ne gère aujourd'hui qu'un couple domicile ↔ travail.
-- **Import GPX**, pour les trajets que le routeur ne trouve pas comme on les fait vraiment.
+- **Trace GPX du retour** : aujourd'hui le retour est la trace de l'aller à l'envers.
