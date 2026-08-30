@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#0b1220" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f1f5f9" media="(prefers-color-scheme: light)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Vélo Météo</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+
+<header class="topbar" id="topbar">
+  <div class="topbar-row">
+    <div class="brand">
+      <span class="brand-mark">🚲</span>
+      <span class="brand-txt">Vélo Météo</span>
+    </div>
+    <button class="chip-btn" id="btn-refresh" aria-label="Rafraîchir">⟳</button>
+  </div>
+  <div class="segmented" id="trip-switch" role="tablist">
+    <button role="tab" data-trip="morning">Matin</button>
+    <button role="tab" data-trip="evening">Soir</button>
+  </div>
+</header>
+
+<main id="view" class="view"></main>
+
+<nav class="tabbar" id="tabbar">
+  <a href="#/" data-tab="/"><span class="ico">🌦️</span><span>Aujourd'hui</span></a>
+  <a href="#/creneaux" data-tab="/creneaux"><span class="ico">⏱️</span><span>Créneaux</span></a>
+  <a href="#/historique" data-tab="/historique"><span class="ico">📊</span><span>Historique</span></a>
+  <a href="#/reglages" data-tab="/reglages"><span class="ico">⚙️</span><span>Réglages</span></a>
+</nav>
+
+<script src="/js/mock.js"></script>
+<script src="/js/ui.js"></script>
+<script src="/js/app.js"></script>
+</body>
+</html>

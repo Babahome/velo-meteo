@@ -1,0 +1,34 @@
+name: "Velo Meteo"
+description: "Meteo pluie & vent sur le trajet velotaf (V1 maquette - donnees mockees)"
+version: "0.1.0"
+slug: "velo_meteo"
+init: false
+startup: application
+boot: auto
+arch:
+  - aarch64
+  - amd64
+  - armv7
+ports:
+  8100/tcp: 8100
+ports_description:
+  8100/tcp: "Velo Meteo - Interface Web & API"
+webui: "http://[HOST]:[PORT:8100]/"
+map:
+  - data:rw
+options:
+  home_address: "1 rue de la Paix, 75002 Paris"
+  work_address: "10 place de la Bourse, 75002 Paris"
+  morning_departure_time: "08:00"
+  evening_departure_time: "18:00"
+  rain_alert_threshold_mm: 0.5
+  ha_long_lived_token: ""
+  notify_service: ""
+schema:
+  home_address: str
+  work_address: str
+  morning_departure_time: match(^([01][0-9]|2[0-3]):[0-5][0-9]$)
+  evening_departure_time: match(^([01][0-9]|2[0-3]):[0-5][0-9]$)
+  rain_alert_threshold_mm: float(0,50)
+  ha_long_lived_token: str?
+  notify_service: str?

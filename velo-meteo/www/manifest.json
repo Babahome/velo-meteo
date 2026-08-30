@@ -1,0 +1,9 @@
+{
+  "name": "Vélo Météo",
+  "short_name": "Vélo Météo",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b1220",
+  "theme_color": "#0b1220",
+  "orientation": "portrait"
+}

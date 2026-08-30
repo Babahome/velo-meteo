@@ -1,0 +1,213 @@
+/* Vélo Météo - maquette V1
+   Mobile-first, lisible en extérieur : gros contrastes, gros indicateur en haut,
+   tout ce qui compte au-dessus de la ligne de flottaison. */
+
+:root{
+  --bg:#eef2f7;  --surface:#ffffff;  --surface-2:#f6f8fb;
+  --text:#0f172a; --text-dim:#5b6b82; --line:#dbe3ec;
+  --accent:#2563eb;
+  --ok:#15803d;   --ok-bg:#dcfce7;
+  --warn:#b45309; --warn-bg:#fef3c7;
+  --bad:#b91c1c;  --bad-bg:#fee2e2;
+  --rain-0:#e2e8f0; --rain-1:#bfdbfe; --rain-2:#60a5fa; --rain-3:#2563eb; --rain-4:#1e3a8a;
+  --radius:16px; --radius-sm:10px;
+  --shadow:0 1px 2px rgba(15,23,42,.06), 0 6px 18px rgba(15,23,42,.06);
+  --safe-top:env(safe-area-inset-top,0px);
+  --safe-bottom:env(safe-area-inset-bottom,0px);
+  --tabbar-h:60px;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#0b1220; --surface:#141d2e; --surface-2:#1b2740;
+    --text:#e8eef7; --text-dim:#93a4bd; --line:#26334b;
+    --accent:#60a5fa;
+    --ok:#4ade80;   --ok-bg:#14361f;
+    --warn:#fbbf24; --warn-bg:#3a2c08;
+    --bad:#fca5a5;  --bad-bg:#3f1414;
+    --rain-0:#26334b; --rain-1:#1e40af; --rain-2:#2563eb; --rain-3:#3b82f6; --rain-4:#93c5fd;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.35);
+  }
+}
+
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--text);
+  font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  overflow-x:hidden;
+  padding-bottom:calc(var(--tabbar-h) + var(--safe-bottom));
+}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
+a{color:inherit;text-decoration:none}
+h1,h2,h3{margin:0}
+
+/* --- Barre du haut ------------------------------------------------ */
+.topbar{
+  position:sticky; top:0; z-index:20;
+  padding:calc(var(--safe-top) + 10px) 14px 10px;
+  background:color-mix(in srgb,var(--bg) 88%,transparent);
+  backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--line);
+}
+.topbar-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.brand{display:flex;align-items:center;gap:8px;font-weight:700;letter-spacing:-.01em}
+.brand-mark{font-size:20px}
+.brand-txt{font-size:17px}
+.chip-btn{
+  width:38px;height:38px;border-radius:50%;display:grid;place-items:center;
+  background:var(--surface);border:1px solid var(--line);font-size:18px
+}
+.segmented{
+  display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:10px;
+  background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:4px
+}
+.segmented button{
+  padding:9px 0;border-radius:9px;font-weight:600;font-size:14px;color:var(--text-dim)
+}
+.segmented button[aria-selected="true"]{background:var(--surface);color:var(--text);box-shadow:var(--shadow)}
+.topbar.no-switch .segmented{display:none}
+
+/* --- Conteneur de page -------------------------------------------- */
+.view{padding:14px 14px 28px;display:flex;flex-direction:column;gap:14px;max-width:640px;margin:0 auto}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+.card-pad{padding:14px}
+.card-title{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);margin-bottom:10px}
+.muted{color:var(--text-dim)}
+.small{font-size:13px}
+.xsmall{font-size:11px}
+
+/* --- Verdict (le gros indicateur) --------------------------------- */
+.verdict{border-radius:var(--radius);padding:18px 16px;border:1px solid transparent}
+.verdict.sec{background:var(--ok-bg);border-color:color-mix(in srgb,var(--ok) 35%,transparent)}
+.verdict.risque{background:var(--warn-bg);border-color:color-mix(in srgb,var(--warn) 35%,transparent)}
+.verdict.pluie{background:var(--bad-bg);border-color:color-mix(in srgb,var(--bad) 35%,transparent)}
+.verdict-head{display:flex;align-items:center;gap:14px}
+.verdict-ico{font-size:44px;line-height:1}
+.verdict-txt h2{font-size:26px;font-weight:800;letter-spacing:-.02em}
+.verdict.sec h2{color:var(--ok)} .verdict.risque h2{color:var(--warn)} .verdict.pluie h2{color:var(--bad)}
+.verdict-sub{font-size:14px;color:var(--text);opacity:.8;margin-top:2px}
+.verdict-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}
+.stat{background:color-mix(in srgb,var(--surface) 70%,transparent);border-radius:var(--radius-sm);padding:8px 6px;text-align:center}
+.stat b{display:block;font-size:18px;font-weight:800;letter-spacing:-.01em}
+.stat span{font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.04em}
+.verdict.compact{padding:12px 14px}
+.verdict.compact .verdict-ico{font-size:30px}
+.verdict.compact .verdict-txt h2{font-size:19px}
+.verdict.compact .verdict-stats{display:none}
+
+/* --- Profil de pluie (bande du trajet) ---------------------------- */
+.profile{display:flex;gap:3px;height:46px;border-radius:10px;overflow:hidden}
+.profile .seg{flex:1;position:relative;display:grid;place-items:center;border-radius:4px}
+/* La rampe va du clair au foncé en thème clair, et du foncé au clair en sombre :
+   la couleur du label suit le palier pour rester lisible dans les deux cas. */
+.profile .seg .lbl{font-size:11px;font-weight:800;color:#fff}
+.profile .seg.t0 .lbl,.profile .seg.t1 .lbl{color:#0f172a}
+@media (prefers-color-scheme:dark){
+  .profile .seg .lbl{color:#e8eef7}
+  .profile .seg.t3 .lbl,.profile .seg.t4 .lbl{color:#0b1220}
+}
+.profile-axis{display:flex;justify-content:space-between;margin-top:6px;font-size:11px;color:var(--text-dim)}
+.profile-peak{
+  margin-top:10px;display:flex;align-items:center;gap:8px;font-size:13px;
+  background:var(--surface-2);border-radius:var(--radius-sm);padding:8px 10px
+}
+.profile-peak .dot{width:8px;height:8px;border-radius:50%;background:var(--rain-3);flex:0 0 auto}
+
+/* --- Vent ---------------------------------------------------------- */
+.wind{display:flex;align-items:center;gap:14px;padding:14px}
+.wind-arrow{
+  width:52px;height:52px;flex:0 0 auto;border-radius:50%;display:grid;place-items:center;
+  background:var(--surface-2);border:1px solid var(--line);font-size:24px
+}
+.wind-main{font-size:17px;font-weight:700}
+.wind-sub{font-size:13px;color:var(--text-dim)}
+.badge{display:inline-block;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.03em}
+.badge.face{background:var(--bad-bg);color:var(--bad)}
+.badge.dos{background:var(--ok-bg);color:var(--ok)}
+.badge.travers{background:var(--warn-bg);color:var(--warn)}
+
+/* --- Graphes / carte SVG ------------------------------------------ */
+.chartbox{padding:12px 8px 6px}
+svg.chart,svg.map{display:block;width:100%;height:auto}
+.legend{display:flex;gap:14px;justify-content:center;padding:6px 0 10px;font-size:11px;color:var(--text-dim)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.maplabel{position:absolute;left:12px;top:12px;font-size:11px;background:color-mix(in srgb,var(--surface) 85%,transparent);
+  border:1px solid var(--line);border-radius:8px;padding:3px 8px;color:var(--text-dim)}
+.mapwrap{position:relative}
+
+/* --- Boutons / accordeons ------------------------------------------ */
+.btn{
+  display:flex;align-items:center;justify-content:center;gap:8px;width:100%;
+  min-height:52px;border-radius:14px;font-weight:700;font-size:16px;
+  background:var(--accent);color:#fff;box-shadow:var(--shadow)
+}
+.btn.ghost{background:var(--surface);color:var(--text);border:1px solid var(--line)}
+.acc{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+.acc>summary{
+  list-style:none;cursor:pointer;padding:14px;font-weight:700;font-size:15px;
+  display:flex;align-items:center;justify-content:space-between
+}
+.acc>summary::-webkit-details-marker{display:none}
+.acc>summary::after{content:"\2304";font-size:18px;color:var(--text-dim);transition:transform .15s}
+.acc[open]>summary::after{transform:rotate(180deg)}
+.acc>.acc-body{border-top:1px solid var(--line)}
+
+/* --- Creneaux ------------------------------------------------------ */
+.slot{display:grid;grid-template-columns:56px 1fr auto;gap:12px;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line)}
+.slot:last-child{border-bottom:0}
+.slot.best{background:color-mix(in srgb,var(--ok) 10%,transparent)}
+.slot.now{box-shadow:inset 3px 0 0 var(--accent)}
+.slot-time{font-size:17px;font-weight:800;letter-spacing:-.02em}
+.bar{height:8px;border-radius:99px;background:var(--surface-2);overflow:hidden}
+.bar>i{display:block;height:100%;border-radius:99px}
+.slot-meta{font-size:12px;color:var(--text-dim);margin-top:5px}
+.pill{padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700}
+.pill.sec{background:var(--ok-bg);color:var(--ok)}
+.pill.risque{background:var(--warn-bg);color:var(--warn)}
+.pill.pluie{background:var(--bad-bg);color:var(--bad)}
+.hero-slot{padding:16px 14px;display:flex;align-items:center;gap:14px;background:var(--ok-bg)}
+.hero-slot .big{font-size:32px;font-weight:800;letter-spacing:-.03em;color:var(--ok)}
+
+/* --- Historique ----------------------------------------------------- */
+.hgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;padding:4px 0}
+.hcell{aspect-ratio:1;border-radius:8px;display:grid;grid-template-rows:1fr 1fr;overflow:hidden;background:var(--surface-2)}
+.hhalf{width:100%}
+.hhalf.sec{background:color-mix(in srgb,var(--ok) 55%,transparent)}
+.hhalf.pluie{background:color-mix(in srgb,var(--rain-3) 85%,transparent)}
+.hdow{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;font-size:11px;color:var(--text-dim);text-align:center;margin-bottom:4px}
+
+/* --- Reglages ------------------------------------------------------- */
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 14px;border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:0}
+.row .k{font-size:14px}
+.row .v{font-size:14px;color:var(--text-dim);text-align:right;max-width:58%;overflow-wrap:anywhere}
+.opt-list{display:flex;flex-direction:column;gap:8px;padding:12px 14px}
+.opt{display:flex;gap:12px;align-items:flex-start;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--surface-2);text-align:left;width:100%}
+.opt[aria-checked="true"]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent)}
+.opt .mark{width:20px;height:20px;border-radius:50%;border:2px solid var(--line);flex:0 0 auto;margin-top:2px}
+.opt[aria-checked="true"] .mark{border-color:var(--accent);background:var(--accent);box-shadow:inset 0 0 0 3px var(--surface)}
+.opt .t{font-weight:700;font-size:14px}
+.opt .d{font-size:12.5px;color:var(--text-dim);margin-top:2px}
+.note{font-size:12.5px;color:var(--text-dim);padding:0 4px}
+
+/* --- Barre d'onglets ------------------------------------------------ */
+.tabbar{
+  position:fixed;left:0;right:0;bottom:0;z-index:30;
+  height:calc(var(--tabbar-h) + var(--safe-bottom));
+  padding-bottom:var(--safe-bottom);
+  display:grid;grid-template-columns:repeat(4,1fr);
+  background:color-mix(in srgb,var(--surface) 94%,transparent);
+  backdrop-filter:blur(12px);border-top:1px solid var(--line)
+}
+.tabbar a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:10.5px;color:var(--text-dim);font-weight:600}
+.tabbar a .ico{font-size:20px;line-height:1}
+.tabbar a[aria-current="page"]{color:var(--accent)}
+
+/* --- Bandeau maquette ----------------------------------------------- */
+.mockbar{
+  display:flex;align-items:center;gap:8px;justify-content:center;
+  font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--warn);background:var(--warn-bg);
+  border:1px dashed color-mix(in srgb,var(--warn) 45%,transparent);
+  border-radius:10px;padding:7px
+}
