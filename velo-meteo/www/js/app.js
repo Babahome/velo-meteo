@@ -724,7 +724,7 @@
         '<section class="card">' +
           '<div class="card-pad">' +
             '<div class="card-title">État</div>' +
-            '<div class="small muted">Version 0.14.0 · ' +
+            '<div class="small muted">Version 0.14.1 · ' +
               (state.config.configured ? 'trajet réel configuré' : 'aucun trajet : données fictives') +
               (state.offline ? ' · API injoignable' : '') + '.</div>' +
           '</div>' +
@@ -872,12 +872,14 @@
       refreshTime().then(function () {
         var w = view.querySelector('.mapwrap');
         if (w) w.classList.remove('pending');
+        var sl = view.querySelector('.mapslider');
+        if (sl) sl.classList.remove('pending');
       });
     }, 320);
 
-    // Retour immédiat sur le rappel de décalage, sans attendre le réseau.
-    var box = view.querySelector('[data-shift-chip]');
-    if (box) box.parentNode.classList.add('pending');
+    // Retour immédiat sur la ligne du curseur, sans attendre le réseau.
+    var box = view.querySelector('.mapslider');
+    if (box) box.classList.add('pending');
   }
 
   /** Change le pas de temps : le serveur rééchantillonne le trajet mémorisé. */

@@ -204,8 +204,8 @@ svg.chart{cursor:ew-resize;touch-action:pan-y}
 .shift-btn[data-shift="10"]{right:0}
 .shift-btn:active{background:var(--accent);color:#fff;border-color:transparent}
 .slider-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.mapslider .slider-lbl{padding-bottom:6px}
-.mapslider .chip-toggle{margin-bottom:8px}
+.mapslider .slider-lbl{padding-bottom:8px}
+.mapslider .slider-mid .chip-toggle{margin:0}
 .slider-actions.pending,.mapslider.pending,.mapwrap.pending .chartpane{opacity:.55;transition:opacity .12s}
 .chip-toggle.shifted{background:var(--warn-bg);color:var(--warn);border-color:transparent}
 .mapslider input[type=range]{
@@ -227,10 +227,12 @@ svg.chart{cursor:ew-resize;touch-action:pan-y}
   border:3px solid var(--surface);box-shadow:var(--shadow)
 }
 .mapslider input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:4px}
-.slider-lbl{display:flex;align-items:center;gap:6px;font-size:13px;padding:2px 0 4px;min-height:22px}
-.slider-lbl .muted{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Heure a gauche, intensite a droite, rappel de decalage centre entre les deux. */
+.slider-lbl{display:flex;align-items:center;gap:6px;font-size:13px;padding:2px 0 4px;min-height:34px}
+.slider-lbl > b{flex:none}
+.slider-mid{flex:1;display:flex;justify-content:center;min-width:0}
 .slider-rate{
-  margin-left:auto;flex:none;font-size:12px;font-weight:700;
+  flex:none;font-size:12px;font-weight:700;
   padding:2px 8px;border-radius:999px;background:var(--surface-2);color:var(--text-dim)
 }
 /* La pastille reprend la couleur exacte du palier, comme la legende. */

@@ -196,8 +196,9 @@
       dots += '<circle cx="' + cx.toFixed(1) + '" cy="' + py.toFixed(1) + '" r="' + (on ? 4.6 : 2.6) +
         '" fill="var(--accent)"' + (on ? ' stroke="var(--surface)" stroke-width="2"' : '') + '/>';
 
-      // L'heure du point choisi est toujours écrite, les autres espacées.
-      if (i % timeEvery === 0 || on) {
+      // L'heure du point choisi est toujours écrite ; ses voisines immédiates
+      // sautent leur tour, sinon trois étiquettes se collent autour du curseur.
+      if (on || (i % timeEvery === 0 && Math.abs(i - active) !== 1)) {
         xlab += '<text x="' + cx.toFixed(1) + '" y="' + (H - 10) + '" text-anchor="middle" font-size="9" ' +
           'font-weight="' + (on ? '700' : '400') + '" fill="var(--' + (on ? 'text' : 'text-dim') + ')">' +
           p.time + '</text>';
@@ -959,9 +960,6 @@
       b.setAttribute('aria-pressed', String(overviewOn));
     });
 
-    Array.prototype.forEach.call(root.querySelectorAll('[data-shift-chip]'), function (box) {
-      box.innerHTML = shiftChip();
-    });
   }
 
   /** Redessine le calque de chaque carte affichée, sans retoucher aux tuiles. */
@@ -1127,7 +1125,6 @@
           'title="Partir 10 minutes plus tard" aria-label="Partir 10 minutes plus tard">+</button>' +
       '</div>' +
       '<div class="slider-lbl" data-slider-label>' + sliderLabel(route) + '</div>' +
-      '<div data-shift-chip>' + shiftChip() + '</div>' +
     '</div>';
   }
 
@@ -1148,27 +1145,40 @@
       '⏱️ ' + (shiftMin > 0 ? '+' : '−') + Math.abs(shiftMin) + ' min · annuler</button>';
   }
 
-  /** Ce que dit le curseur à sa position courante. */
+  /**
+   * Ce que dit le curseur à sa position courante : **l'heure seule** à gauche,
+   * l'intensité à droite, et entre les deux le rappel de décalage.
+   *
+   * Le nom de rue et le kilométrage ont été retirés : ils changeaient de forme
+   * à chaque cran — « Départ · Avenue Denis Papin » puis « km 10,2 » — ce qui
+   * faisait sauter la ligne sans rien apprendre. Le lieu se lit sur la carte,
+   * où le marqueur se déplace en même temps.
+   */
   function sliderLabel(route) {
     var pts = route.points || [];
+    var head, tail;
+
     if (overviewOn) {
-      return '<b>Tout le trajet</b>' +
-        '<span class="muted"> · chaque endroit à l’heure où tu y passes</span>';
-    }
-    var p = pts[frame] || {};
-    var f = field.frames[frame] || {};
-    var head = '<b>' + esc(f.time || p.time || '') + '</b>' +
-      '<span class="muted"> · ' + esc(p.label || ('point ' + (frame + 1))) + '</span>';
+      head = '<b>Tout le trajet</b>';
+      tail = '';
+    } else {
+      var p = pts[frame] || {};
+      var f = field.frames[frame] || {};
+      head = '<b>' + esc(f.time || p.time || '') + '</b>';
 
-    // Un départ au-delà de la fenêtre de prévision n'a pas d'image : le dire,
-    // plutôt que d'afficher un ciel sec qui serait faux.
-    if (f.found === false) {
-      return head + '<span class="slider-rate">pas de prévision</span>';
+      // Un départ au-delà de la fenêtre de prévision n'a pas d'image : le dire,
+      // plutôt que d'afficher un ciel sec qui serait faux.
+      if (f.found === false) {
+        tail = '<span class="slider-rate">pas de prévision</span>';
+      } else {
+        var rate = onRoute(frame);
+        tail = '<span class="slider-rate t' + rainTier(rate) + '">' +
+          (rate >= 0.1 ? num(rate) + ' mm/h' : 'sec') + '</span>';
+      }
     }
 
-    var rate = onRoute(frame);
-    return head + '<span class="slider-rate t' + rainTier(rate) + '">' +
-      (rate >= 0.1 ? num(rate) + ' mm/h' : 'sec') + '</span>';
+    // Le rappel de décalage occupe l'espace libre entre les deux, centré.
+    return head + '<span class="slider-mid">' + shiftChip() + '</span>' + tail;
   }
 
   /** Intensité de l'image `i` à l'endroit où se trouve le vélo à ce moment-là. */

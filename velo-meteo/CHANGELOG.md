@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.14.1 — La ligne du curseur allégée
+
+- **L'heure seule** sous le curseur. Le nom de rue et le kilométrage changeaient de forme
+  à chaque cran — « Départ · Avenue Denis Papin » puis « km 10,2 » — ce qui faisait sauter
+  la ligne sans rien apprendre. Le lieu se lit sur la carte, dont le marqueur se déplace
+  en même temps.
+- **Le rappel de décalage est centré** entre l'heure, à gauche, et l'intensité, à droite,
+  au lieu d'occuper une ligne à lui.
+- Les heures du graphe ne se collent plus autour du curseur : les deux voisines immédiates
+  du point choisi sautent leur tour.
+
 ## 0.14.0 — Le prochain trajet à l'ouverture
 
 - **À l'ouverture, l'app montre le prochain trajet à venir**, plus une bascule fixe à 13 h.
