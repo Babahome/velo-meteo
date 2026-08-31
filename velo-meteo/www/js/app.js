@@ -28,7 +28,7 @@
   var LAYOUTS = {
     A: { name: 'A · Verdict d’abord', desc: 'Verdict → profil de pluie → vent → carte → graphe. Les chiffres avant l’image.' },
     B: { name: 'B · Carte d’abord', desc: 'Carte → graphe de pluie par point de passage → verdict → profil → vent. Le plus visuel.' },
-    C: { name: 'C · Coup d’œil', desc: 'Verdict + profil + vent seulement, le reste replié. Une seule hauteur d’écran, zéro scroll.' }
+    C: { name: 'C · Coup d’œil', desc: 'Verdict + profil + vent seulement, la carte repliée. Une seule hauteur d’écran, zéro scroll.' }
   };
 
   /**
@@ -198,6 +198,7 @@
     return Promise.all([api.route(t), api.weather(t), api.wind(t), refreshField()]).then(function (res) {
       var route = res[0], weather = noteSource(res[1]), wind = res[2];
       shownRoute = route;
+      UI.setShown(route, weather);
       var seuil = state.options ? state.options.rain_alert_threshold_mm : 0.5;
       var v = UI.verdictOf(weather, seuil);
 
@@ -207,12 +208,11 @@
         '<a class="btn" href="#/creneaux">⏱️ Voir le meilleur créneau</a>' +
         '<a class="btn ghost" href="#/historique">📊 Historique du vélotaf</a>';
 
-      // Carte en premier, puis le graphe de pluie par point de passage :
-      // on situe le trajet, puis on lit où ça tombe dessus.
+      // Carte, curseur et graphe forment un seul bloc : trois vues du même
+      // trajet, qui se synchronisent entre elles.
       if (state.layout === 'B') {
         return head +
-          UI.radarMap(route) +
-          UI.rainChart(weather) +
+          UI.radarMap(route, weather) +
           UI.verdictCard(weather, v, true) +
           UI.profileStrip(route, weather) +
           UI.windCard(wind) +
@@ -225,21 +225,18 @@
           UI.verdictCard(weather, v, false) +
           UI.profileStrip(route, weather) +
           UI.windCard(wind) +
-          '<details class="acc"><summary>Carte du trajet</summary>' +
-            '<div class="acc-body">' + UI.radarMap(route) + '</div></details>' +
-          '<details class="acc"><summary>Détail par point de passage</summary>' +
-            '<div class="acc-body">' + UI.rainChart(weather) + '</div></details>' +
+          '<details class="acc"><summary>Carte et pluie du trajet</summary>' +
+            '<div class="acc-body">' + UI.radarMap(route, weather) + '</div></details>' +
           cta;
       }
 
       // Même en A, la carte passe avant le graphe : elle donne le contexte que
-      // le graphe suppose connu.
+      // le graphe suppose connu, et les deux ne font plus qu'un bloc.
       return head +
         UI.verdictCard(weather, v, false) +
         UI.profileStrip(route, weather) +
         UI.windCard(wind) +
-        UI.radarMap(route) +
-        UI.rainChart(weather) +
+        UI.radarMap(route, weather) +
         UI.routeSummary(route) +
         cta;
     });
@@ -254,6 +251,7 @@
       var payload = noteSource(res[0]);
       var slots = payload.windows, route = res[1];
       shownRoute = route;
+      UI.setShown(route, null);
       var best = slots.reduce(function (a, b) { return b.score > a.score ? b : a; }, slots[0]);
       var usual = slots.filter(function (s) { return s.is_usual; })[0] ||
                   slots.filter(function (s) { return s.time === route.departure; })[0];
@@ -588,7 +586,7 @@
         '<section class="card">' +
           '<div class="card-pad">' +
             '<div class="card-title">État</div>' +
-            '<div class="small muted">Version 0.8.0 · ' +
+            '<div class="small muted">Version 0.9.0 · ' +
               (state.config.configured ? 'trajet réel configuré' : 'aucun trajet : données fictives') +
               (state.offline ? ' · API injoignable' : '') + '.</div>' +
           '</div>' +

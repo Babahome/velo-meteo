@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.9.0 — Carte, curseur et graphe ne font plus qu'un
+
+- **La carte et le graphe de pluie sont contigus.** Le bouton de vue d'ensemble et la
+  ligne de crédits s'intercalaient entre les deux et cassaient la lecture : ils passent
+  après le graphe, avec la légende de l'échelle — qui sert d'ailleurs aux deux, puisque
+  les barres du graphe et les nuages de la carte partagent la même rampe. Le bloc
+  enchaîne désormais carte → curseur → graphe, dans une seule carte.
+- **Les trois vues sont synchronisées.** Déplacer le curseur, cliquer une colonne du
+  graphe ou glisser le long de celui-ci désigne le même point du trajet : le marqueur de
+  la carte, la position du curseur, la colonne mise en avant et l'étiquette d'heure
+  suivent ensemble.
+  - La colonne active est soulignée d'une bande, sa barre cernée, son point de
+    probabilité grossi et son heure mise en gras.
+  - Les zones de saisie du graphe couvrent toute la hauteur d'une colonne : viser une
+    barre de deux pixels au doigt serait intenable.
+  - Cliquer le graphe quitte la vue d'ensemble, comme le curseur — désigner un point,
+    c'est demander un instant.
+- La pastille d'intensité du curseur reprend la couleur exacte de son palier, comme la
+  légende, au lieu d'une seule couleur pour trois paliers.
+
+Le layout C fond aussi les deux dans un unique accordéon « Carte et pluie du trajet »,
+au lieu de deux repliables séparés.
+
 ## 0.8.0 — Échelle de pluie lisible, décalage du départ, repères distincts
 
 - **L'échelle de couleur de la pluie est refaite.** Elle était calibrée en opacité

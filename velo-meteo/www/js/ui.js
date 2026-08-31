@@ -121,7 +121,7 @@
 
   /* ---------- graphe mm + % ---------- */
 
-  function rainChart(weather) {
+  function rainChart(weather, standalone) {
     var W = 340, H = 156, L = 28, R = 30, T = 12, B = 30;
     var pw = W - L - R, ph = H - T - B;
     var pts = weather.points;
@@ -129,7 +129,11 @@
     var step = pw / pts.length;
     var bw = Math.min(22, step * 0.56);
 
-    var grid = '', bars = '', line = '', dots = '', xlab = '';
+    var grid = '', bars = '', line = '', dots = '', xlab = '', hits = '', band = '';
+
+    // Colonne du point choisi au curseur : le graphe doit dire la même chose que
+    // la carte, sinon les deux se lisent séparément au lieu de se répondre.
+    var active = overviewOn ? -1 : frame;
     [0, 0.5, 1].forEach(function (f) {
       var y = T + ph - f * ph;
       grid += '<line x1="' + L + '" y1="' + y.toFixed(1) + '" x2="' + (W - R) + '" y2="' + y.toFixed(1) +
@@ -143,34 +147,57 @@
     pts.forEach(function (p, i) {
       var cx = L + step * i + step / 2;
       var h = (p.rate / maxMm) * ph;
+      var on = i === active;
+
+      if (on) {
+        band = '<rect x="' + (cx - step / 2).toFixed(1) + '" y="' + T + '" width="' + step.toFixed(1) +
+          '" height="' + ph + '" rx="4" fill="var(--accent)" opacity=".12"/>';
+      }
+
       bars += '<rect x="' + (cx - bw / 2).toFixed(1) + '" y="' + (T + ph - h).toFixed(1) +
         '" width="' + bw.toFixed(1) + '" height="' + Math.max(h, 1.5).toFixed(1) +
-        '" rx="3" fill="' + rainColor(p.rate) + '"/>';
+        '" rx="3" fill="' + rainColor(p.rate) + '"' +
+        (on ? ' stroke="var(--accent)" stroke-width="2"' : '') + '/>';
+
       var py = T + ph - (p.prob / 100) * ph;
       line += (i === 0 ? 'M' : 'L') + cx.toFixed(1) + ' ' + py.toFixed(1) + ' ';
-      dots += '<circle cx="' + cx.toFixed(1) + '" cy="' + py.toFixed(1) + '" r="2.6" fill="var(--accent)"/>';
-      if (i % 2 === 0) {
-        xlab += '<text x="' + cx.toFixed(1) + '" y="' + (H - 10) + '" text-anchor="middle" font-size="9" fill="var(--text-dim)">' +
+      dots += '<circle cx="' + cx.toFixed(1) + '" cy="' + py.toFixed(1) + '" r="' + (on ? 4.6 : 2.6) +
+        '" fill="var(--accent)"' + (on ? ' stroke="var(--surface)" stroke-width="2"' : '') + '/>';
+
+      // L'heure du point choisi est toujours écrite, les autres une sur deux.
+      if (i % 2 === 0 || on) {
+        xlab += '<text x="' + cx.toFixed(1) + '" y="' + (H - 10) + '" text-anchor="middle" font-size="9" ' +
+          'font-weight="' + (on ? '700' : '400') + '" fill="var(--' + (on ? 'text' : 'text-dim') + ')">' +
           p.time + '</text>';
       }
+
+      // Zone de saisie sur toute la hauteur : viser une barre de 2 px au doigt
+      // serait intenable.
+      hits += '<rect class="hit" data-point="' + i + '" x="' + (cx - step / 2).toFixed(1) + '" y="0" ' +
+        'width="' + step.toFixed(1) + '" height="' + H + '" fill="transparent"/>';
     });
 
-    return '' +
-      '<section class="card">' +
+    var open = standalone ? '<section class="card">' : '<div class="chartpane" data-chart>';
+    var close = standalone ? '</section>' : '</div>';
+
+    return open +
         '<div class="card-pad" style="padding-bottom:0"><div class="card-title">Pluie par point de passage</div></div>' +
         '<div class="chartbox">' +
           '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Pluie en mm et probabilité par point">' +
-            grid + bars +
+            band + grid + bars +
             '<path d="' + line.trim() + '" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
-            dots + xlab +
+            dots + xlab + hits +
           '</svg>' +
         '</div>' +
         '<div class="legend">' +
           '<span><i style="background:var(--rain-3)"></i>intensité (mm/h)</span>' +
           '<span><i style="background:var(--accent);border-radius:99px"></i>probabilité (%)</span>' +
         '</div>' +
-      '</section>';
+      close;
   }
+
+  /** Le graphe seul, sans la coquille de carte : layout C, en accordéon. */
+  function rainChartCard(weather) { return rainChart(weather, true); }
 
   /* ---------- carte : fond de tuiles + tracé ---------- */
   /* Carte déplaçable et zoomable, sans bibliothèque carto. Leaflet ou MapLibre
@@ -812,6 +839,37 @@
     el._redraw();
   }
 
+  // Trajet et météo de la page en cours : la synchronisation regénère le graphe
+  // et l'étiquette du curseur, elle a besoin des deux.
+  var shown = { route: null, weather: null };
+  function setShown(route, weather) { shown.route = route; shown.weather = weather || null; }
+
+  /**
+   * Aligne les trois vues sur le point courant : carte, curseur et graphe.
+   * Appelée quelle que soit celle des trois qu'on a manipulée.
+   */
+  function syncSelection(scope) {
+    var root = scope || d;
+    redrawLayers(root);
+
+    Array.prototype.forEach.call(root.querySelectorAll('[data-slider]'), function (box) {
+      var input = box.querySelector('input[type=range]');
+      if (input && !overviewOn && +input.value !== frame) input.value = frame;
+      var lbl = box.querySelector('[data-slider-label]');
+      if (lbl && shown.route) lbl.innerHTML = sliderLabel(shown.route);
+    });
+
+    Array.prototype.forEach.call(root.querySelectorAll('[data-chart]'), function (pane) {
+      if (shown.weather) pane.outerHTML = rainChart(shown.weather, false);
+    });
+    // outerHTML remplace le nœud : le graphe reconstruit n'a plus d'écouteur.
+    bindChart(root);
+
+    Array.prototype.forEach.call(root.querySelectorAll('[data-overview]'), function (b) {
+      b.setAttribute('aria-pressed', String(overviewOn));
+    });
+  }
+
   /** Redessine le calque de chaque carte affichée, sans retoucher aux tuiles. */
   function redrawLayers(root) {
     Array.prototype.forEach.call((root || d).querySelectorAll('.mapcanvas[data-map]'), function (el) {
@@ -833,37 +891,52 @@
       }
     });
 
-    // Le curseur ne redessine que le calque SVG : passer d'un cran à l'autre
-    // ne doit ni recharger les tuiles ni refaire le rendu de la page.
-    Array.prototype.forEach.call(scope.querySelectorAll('[data-slider]'), function (box) {
-      var input = box.querySelector('input[type=range]');
-      var btn = box.querySelector('[data-overview]');
-      var lbl = box.querySelector('[data-slider-label]');
+    // Aucune des trois vues ne recharge la page ni les tuiles : elles se
+    // redessinent entre elles.
+    Array.prototype.forEach.call(scope.querySelectorAll('[data-slider] input[type=range]'), function (input) {
+      input.addEventListener('input', function () {
+        setFrame(input.value);
+        setOverview(false);   // toucher le curseur, c'est demander un instant
+        syncSelection(scope);
+      });
+    });
 
-      var refresh = function () {
-        redrawLayers(scope);
-        if (lbl && route) lbl.innerHTML = sliderLabel(route);
-        if (btn) btn.setAttribute('aria-pressed', String(overviewOn));
+    Array.prototype.forEach.call(scope.querySelectorAll('[data-overview]'), function (btn) {
+      btn.addEventListener('click', function () {
+        setOverview(!overviewOn);
+        syncSelection(scope);
+      });
+    });
+
+    // Le graphe est la troisième poignée : cliquer ou glisser sur une colonne
+    // déplace le curseur et la carte.
+    bindChart(scope);
+  }
+
+  /** Sélection depuis le graphe. Réattachée à chaque regénération de celui-ci. */
+  function bindChart(scope) {
+    Array.prototype.forEach.call(scope.querySelectorAll('[data-chart] svg.chart'), function (svg) {
+      if (svg._bound) return;
+      svg._bound = true;
+
+      var pick = function (e) {
+        var t = e.target.closest ? e.target.closest('.hit') : null;
+        if (!t) return;
+        var i = +t.getAttribute('data-point');
+        if (!overviewOn && i === frame) return;
+        setFrame(i);
+        setOverview(false);
+        syncSelection(scope);
       };
 
-      if (input) {
-        input.addEventListener('input', function () {
-          setFrame(input.value);
-          setOverview(false);   // toucher le curseur, c'est demander un instant
-          refresh();
-        });
-      }
-
-      if (btn) {
-        btn.addEventListener('click', function () {
-          setOverview(!overviewOn);
-          refresh();
-        });
-      }
+      svg.addEventListener('pointerdown', pick);
+      svg.addEventListener('pointermove', function (e) {
+        if (e.buttons) pick(e);   // glisser le long du graphe balaie le trajet
+      });
     });
   }
 
-  function radarMap(route) {
+  function radarMap(route, weather) {
     var coords = trackCoords(route);
     var cells = route.rain_cells || [];
 
@@ -886,11 +959,16 @@
     if (field.source === 'demo') caption += ' · ☔ averse simulée (test)';
     else if (field.available) caption += ' · nuages de pluie Open-Meteo';
 
+    // Carte, curseur et graphe s'enchaînent sans rien entre eux : ce sont trois
+    // vues du même trajet, elles doivent se lire d'un seul tenant. Le bouton de
+    // vue d'ensemble, la légende et les crédits passent donc après le graphe.
     return '' +
       '<section class="card mapwrap">' +
         '<div class="mapcanvas" data-map="' + id + '"></div>' +
-        rainKey() +
         timeSlider(route) +
+        (weather ? rainChart(weather, false) : '') +
+        '<div class="mapactions">' + sliderActions() + '</div>' +
+        rainKey() +
         // En surimpression, l'étiquette masquait le marqueur quand le trajet
         // arrivait dans ce coin : elle est sous la carte.
         '<div class="mapfoot">' + esc(caption) + '</div>' +
@@ -921,11 +999,15 @@
         '<button type="button" class="shift-btn" data-shift="10" aria-label="Partir 10 minutes plus tard">+10</button>' +
       '</div>' +
       '<div class="slider-lbl" data-slider-label>' + sliderLabel(route) + '</div>' +
-      '<div class="slider-actions">' +
-        '<button class="chip-toggle" data-overview aria-pressed="' + overviewOn + '">' +
-          '🗺️ Vue d’ensemble</button>' +
-        shiftChip() +
-      '</div>' +
+    '</div>';
+  }
+
+  /** Bouton de vue d'ensemble et rappel de décalage, placés après le graphe. */
+  function sliderActions() {
+    return '<div class="slider-actions">' +
+      '<button class="chip-toggle" data-overview aria-pressed="' + overviewOn + '">' +
+        '🗺️ Vue d’ensemble</button>' +
+      shiftChip() +
     '</div>';
   }
 
@@ -1041,6 +1123,7 @@
     setField: setField, setFrame: setFrame, setOverview: setOverview,
     setBasemap: setBasemap, basemapKeys: basemapKeys, basemapName: basemapName,
     setEngine: setEngine, engineKeys: engineKeys,
-    setShift: setShift, setMarkers: setMarkers, markerSets: markerSets
+    setShift: setShift, setMarkers: setMarkers, markerSets: markerSets,
+    setShown: setShown, rainChartCard: rainChartCard
   };
 })(window, document);

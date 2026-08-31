@@ -203,6 +203,18 @@ fictive. Elle emprunte exactement le même chemin que les vraies données, ce qu
 juger le rendu sans attendre qu'il pleuve pour de bon au-dessus du trajet. Le verdict et
 les chiffres, eux, ne bougent pas.
 
+### Carte, curseur et graphe : un seul bloc
+
+Les trois se suivent sans rien entre eux, dans une même carte : ce sont trois vues du
+même trajet. Le bouton de vue d'ensemble, la légende de l'échelle et les crédits viennent
+après le graphe.
+
+Et ils sont **synchronisés** : déplacer le curseur, cliquer une colonne du graphe ou
+glisser le long de celui-ci désigne le même point. Le marqueur de la carte, la position
+du curseur et la colonne mise en avant suivent ensemble. Les zones de saisie du graphe
+couvrent toute la hauteur d'une colonne — viser une barre de deux pixels au doigt serait
+intenable.
+
 ### Le curseur de parcours
 
 Sous la carte, un curseur déplace un point le long du trajet. Il est **purement
@@ -237,7 +249,8 @@ dans le navigateur du téléphone.
   verdict → profil → vent. On situe le trajet, puis on lit où ça tombe dessus.
 - **A — Verdict d'abord** : verdict → profil de pluie → vent → carte → graphe.
   Tout ce qui décide « j'y vais ou pas » tient dans le premier écran.
-- **C — Coup d'œil** : verdict + profil + vent, le reste replié. Zéro scroll.
+- **C — Coup d'œil** : verdict + profil + vent, la carte et le graphe repliés dans un
+  unique accordéon. Zéro scroll.
 
 ### mm/h ou mm : deux chiffres différents
 
