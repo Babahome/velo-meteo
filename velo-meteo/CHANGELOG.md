@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.9.1 — Le graphe dit ses chiffres, la carte gagne ses coins
+
+- **L'intensité est écrite au-dessus de chaque barre** du graphe. Une barre courte ne
+  disait pas si on parlait de bruine ou d'averse ; on lit maintenant « 0,6 », « 3,2 »,
+  « 11,0 » directement.
+- **Le titre « Pluie par point de passage » disparaît** : le graphe suit immédiatement le
+  curseur, son objet est évident.
+- **La légende de l'échelle passe en tête du bloc**, au-dessus de la carte.
+- **Les crédits** (« Tracé réel · © OpenStreetMap ») passent **en surimpression dans le
+  coin bas droit** de la carte, sur fond translucide.
+- **Le bouton « Vue d'ensemble »** passe dans le **coin bas gauche**, même traitement.
+  Chaque coin tient dans sa moitié de carte : les deux ne peuvent pas se chevaucher,
+  quelle que soit la largeur de l'écran.
+- Le marqueur d'**averse simulée** prend le coin haut gauche, seul endroit encore libre :
+  il ne faut pas pouvoir confondre une averse de test avec une vraie.
+- Les graduations de l'axe passent à la virgule décimale, comme le reste de l'app.
+
 ## 0.9.0 — Carte, curseur et graphe ne font plus qu'un
 
 - **La carte et le graphe de pluie sont contigus.** Le bouton de vue d'ensemble et la

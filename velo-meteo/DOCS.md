@@ -206,8 +206,9 @@ les chiffres, eux, ne bougent pas.
 ### Carte, curseur et graphe : un seul bloc
 
 Les trois se suivent sans rien entre eux, dans une même carte : ce sont trois vues du
-même trajet. Le bouton de vue d'ensemble, la légende de l'échelle et les crédits viennent
-après le graphe.
+même trajet. La légende de l'échelle ouvre le bloc — elle vaut pour la carte comme pour
+les barres du graphe, qui partagent la même rampe. Le bouton de vue d'ensemble et les
+crédits sont posés en surimpression dans les coins bas de la carte, gauche et droite.
 
 Et ils sont **synchronisés** : déplacer le curseur, cliquer une colonne du graphe ou
 glisser le long de celui-ci désigne le même point. Le marqueur de la carte, la position

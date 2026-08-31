@@ -134,14 +134,36 @@ h1,h2,h3{margin:0}
 svg.chart,svg.map{display:block;width:100%;height:auto}
 .legend{display:flex;gap:14px;justify-content:center;padding:6px 0 10px;font-size:11px;color:var(--text-dim)}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
-.mapfoot{font-size:11px;color:var(--text-dim);padding:8px 12px;border-top:1px solid var(--line)}
+/* Coins de la carte : bouton a gauche, credits a droite, en surimpression.
+   Le conteneur laisse passer les gestes, seuls les enfants les captent. */
+.mapbox{position:relative}
+/* Chaque coin tient dans sa moitie : les deux du bas ne peuvent plus se
+   chevaucher, quelle que soit la largeur de l'ecran. */
+.mapover{position:absolute;z-index:5;pointer-events:none;max-width:calc(50% - 10px)}
+.mapover.left{left:8px;bottom:8px}
+.mapover.right{right:8px;bottom:8px;text-align:right}
+.mapover.top{left:8px;top:8px;max-width:calc(100% - 60px)}
+.mapover > *{pointer-events:auto}
+.mapfoot{
+  display:inline-block;font-size:10px;line-height:1.35;color:var(--text);
+  background:color-mix(in srgb,var(--surface) 66%,transparent);
+  backdrop-filter:blur(5px);
+  padding:3px 7px;border-radius:7px
+}
+.mapover .chip-toggle{
+  margin:0;font-size:11px;padding:7px 10px;
+  background:color-mix(in srgb,var(--surface) 78%,transparent);
+  backdrop-filter:blur(5px);color:var(--text)
+}
+.mapfoot.demo{font-weight:700;color:var(--warn)}
+.mapover .chip-toggle[aria-pressed=true]{background:var(--accent);color:#fff}
+
 /* Graphe imbrique dans la carte : pas de cadre propre, il prolonge le curseur. */
 .chartpane{border-top:1px solid var(--line)}
 .chartpane .legend{padding-bottom:4px}
-.mapactions{padding:6px 14px 2px}
 svg.chart .hit{cursor:pointer}
 /* Legende de l'echelle de pluie : sans elle, les couleurs ne veulent rien dire. */
-.rainkey{display:flex;align-items:center;gap:0;padding:8px 12px 0;font-size:10px;color:var(--text-dim)}
+.rainkey{display:flex;align-items:center;gap:0;padding:10px 12px;font-size:10px;color:var(--text-dim)}
 .rainkey b{font-weight:700;margin-right:8px;white-space:nowrap}
 .rainkey .band{flex:1;text-align:center;padding:3px 0;color:#fff;font-weight:700}
 .rainkey .band:first-of-type{border-radius:5px 0 0 5px}
@@ -164,7 +186,8 @@ svg.chart .hit{cursor:pointer}
 }
 .shift-btn:active{background:var(--accent);color:#fff;border-color:transparent}
 .slider-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.mapslider .slider-lbl{padding-bottom:8px}
+.mapslider .slider-lbl{padding-bottom:6px}
+.mapslider .chip-toggle{margin-bottom:8px}
 .slider-actions.pending{opacity:.55}
 .chip-toggle.shifted{background:var(--warn-bg);color:var(--warn);border-color:transparent}
 .mapslider input[type=range]{

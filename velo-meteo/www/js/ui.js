@@ -122,7 +122,8 @@
   /* ---------- graphe mm + % ---------- */
 
   function rainChart(weather, standalone) {
-    var W = 340, H = 156, L = 28, R = 30, T = 12, B = 30;
+    // T laisse la place aux valeurs ecrites au-dessus des barres.
+    var W = 340, H = 158, L = 28, R = 30, T = 22, B = 30;
     var pw = W - L - R, ph = H - T - B;
     var pts = weather.points;
     var maxMm = Math.max(1, Math.ceil(Math.max.apply(null, pts.map(function (p) { return p.rate; }))));
@@ -139,7 +140,7 @@
       grid += '<line x1="' + L + '" y1="' + y.toFixed(1) + '" x2="' + (W - R) + '" y2="' + y.toFixed(1) +
         '" stroke="var(--line)" stroke-width="1"/>' +
         '<text x="' + (L - 5) + '" y="' + (y + 3.5).toFixed(1) + '" text-anchor="end" font-size="9" fill="var(--text-dim)">' +
-        (f * maxMm).toFixed(f === 0 ? 0 : 1) + '</text>' +
+        (f === 0 ? '0' : num(f * maxMm)) + '</text>' +
         '<text x="' + (W - R + 5) + '" y="' + (y + 3.5).toFixed(1) + '" font-size="9" fill="var(--text-dim)">' +
         Math.round(f * 100) + '</text>';
     });
@@ -158,6 +159,14 @@
         '" width="' + bw.toFixed(1) + '" height="' + Math.max(h, 1.5).toFixed(1) +
         '" rx="3" fill="' + rainColor(p.rate) + '"' +
         (on ? ' stroke="var(--accent)" stroke-width="2"' : '') + '/>';
+
+      // L'intensité écrite au-dessus de la barre : sans elle, une barre courte
+      // ne dit pas si on parle de bruine ou d'averse.
+      if (p.rate >= 0.05) {
+        bars += '<text x="' + cx.toFixed(1) + '" y="' + (T + ph - h - 4).toFixed(1) +
+          '" text-anchor="middle" font-size="10" font-weight="700" fill="var(--text)">' +
+          num(p.rate) + '</text>';
+      }
 
       var py = T + ph - (p.prob / 100) * ph;
       line += (i === 0 ? 'M' : 'L') + cx.toFixed(1) + ' ' + py.toFixed(1) + ' ';
@@ -181,7 +190,6 @@
     var close = standalone ? '</section>' : '</div>';
 
     return open +
-        '<div class="card-pad" style="padding-bottom:0"><div class="card-title">Pluie par point de passage</div></div>' +
         '<div class="chartbox">' +
           '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Pluie en mm et probabilité par point">' +
             band + grid + bars +
@@ -952,26 +960,30 @@
     sliderPoints = pts;
 
     var conf = BASEMAPS[basemap] || BASEMAPS.osm;
+    // Deux coins voisins : la mention reste courte pour ne pas venir manger le
+    // bouton d'en face. L'averse simulée, elle, a son propre coin.
     var caption = (route.track_ll ? 'Tracé réel' : 'Points de passage') + ' · ' + conf.credit;
-
-    // Les nuages valent pour l'heure de passage, pas pour maintenant : c'est
-    // toute la différence avec une image radar, et ça doit se lire.
-    if (field.source === 'demo') caption += ' · ☔ averse simulée (test)';
-    else if (field.available) caption += ' · nuages de pluie Open-Meteo';
 
     // Carte, curseur et graphe s'enchaînent sans rien entre eux : ce sont trois
     // vues du même trajet, elles doivent se lire d'un seul tenant. Le bouton de
     // vue d'ensemble, la légende et les crédits passent donc après le graphe.
+    // La légende ouvre le bloc : elle vaut pour la carte et pour les barres du
+    // graphe, qui partagent la même rampe. Le bouton de vue d'ensemble et les
+    // crédits passent dans les coins de la carte, pour ne rien intercaler entre
+    // la carte, le curseur et le graphe.
     return '' +
       '<section class="card mapwrap">' +
-        '<div class="mapcanvas" data-map="' + id + '"></div>' +
+        rainKey() +
+        '<div class="mapbox">' +
+          '<div class="mapcanvas" data-map="' + id + '"></div>' +
+          (field.source === 'demo'
+            ? '<div class="mapover top"><div class="mapfoot demo">☔ averse simulée</div></div>'
+            : '') +
+          '<div class="mapover left">' + overviewBtn() + '</div>' +
+          '<div class="mapover right"><div class="mapfoot">' + esc(caption) + '</div></div>' +
+        '</div>' +
         timeSlider(route) +
         (weather ? rainChart(weather, false) : '') +
-        '<div class="mapactions">' + sliderActions() + '</div>' +
-        rainKey() +
-        // En surimpression, l'étiquette masquait le marqueur quand le trajet
-        // arrivait dans ce coin : elle est sous la carte.
-        '<div class="mapfoot">' + esc(caption) + '</div>' +
       '</section>';
   }
 
@@ -999,16 +1011,14 @@
         '<button type="button" class="shift-btn" data-shift="10" aria-label="Partir 10 minutes plus tard">+10</button>' +
       '</div>' +
       '<div class="slider-lbl" data-slider-label>' + sliderLabel(route) + '</div>' +
+      shiftChip() +
     '</div>';
   }
 
-  /** Bouton de vue d'ensemble et rappel de décalage, placés après le graphe. */
-  function sliderActions() {
-    return '<div class="slider-actions">' +
-      '<button class="chip-toggle" data-overview aria-pressed="' + overviewOn + '">' +
-        '🗺️ Vue d’ensemble</button>' +
-      shiftChip() +
-    '</div>';
+  /** Bouton de vue d'ensemble, posé dans le coin bas gauche de la carte. */
+  function overviewBtn() {
+    return '<button class="chip-toggle" data-overview aria-pressed="' + overviewOn + '">' +
+      '🗺️ Vue d’ensemble</button>';
   }
 
   // Décalage du départ demandé depuis la carte, en minutes. Renseigné par app.js.
