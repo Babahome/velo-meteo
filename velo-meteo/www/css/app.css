@@ -9,7 +9,10 @@
   --ok:#15803d;   --ok-bg:#dcfce7;
   --warn:#b45309; --warn-bg:#fef3c7;
   --bad:#b91c1c;  --bad-bg:#fee2e2;
-  --rain-0:#e2e8f0; --rain-1:#bfdbfe; --rain-2:#60a5fa; --rain-3:#2563eb; --rain-4:#1e3a8a;
+  /* Rampe d'intensite de pluie. Elle traverse la teinte (cyan -> bleu -> violet
+     -> magenta) au lieu de rester dans les bleus : sur un fond de carte deja
+     colore et sous un flou, quatre bleus se confondent, quatre teintes non. */
+  --rain-0:#e2e8f0; --rain-1:#7dd3fc; --rain-2:#2563eb; --rain-3:#7c3aed; --rain-4:#db2777;
   --radius:16px; --radius-sm:10px;
   --shadow:0 1px 2px rgba(15,23,42,.06), 0 6px 18px rgba(15,23,42,.06);
   --safe-top:env(safe-area-inset-top,0px);
@@ -24,7 +27,7 @@
     --ok:#4ade80;   --ok-bg:#14361f;
     --warn:#fbbf24; --warn-bg:#3a2c08;
     --bad:#fca5a5;  --bad-bg:#3f1414;
-    --rain-0:#26334b; --rain-1:#1e40af; --rain-2:#2563eb; --rain-3:#3b82f6; --rain-4:#93c5fd;
+    --rain-0:#26334b; --rain-1:#38bdf8; --rain-2:#60a5fa; --rain-3:#a78bfa; --rain-4:#f472b6;
     --shadow:0 1px 2px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.35);
   }
 }
@@ -104,7 +107,7 @@ h1,h2,h3{margin:0}
 .profile .seg.t0 .lbl,.profile .seg.t1 .lbl{color:#0f172a}
 @media (prefers-color-scheme:dark){
   .profile .seg .lbl{color:#e8eef7}
-  .profile .seg.t3 .lbl,.profile .seg.t4 .lbl{color:#0b1220}
+  .profile .seg.t1 .lbl,.profile .seg.t3 .lbl,.profile .seg.t4 .lbl{color:#0b1220}
 }
 .profile-axis{display:flex;justify-content:space-between;margin-top:6px;font-size:11px;color:var(--text-dim)}
 .profile-peak{
@@ -132,13 +135,34 @@ svg.chart,svg.map{display:block;width:100%;height:auto}
 .legend{display:flex;gap:14px;justify-content:center;padding:6px 0 10px;font-size:11px;color:var(--text-dim)}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
 .mapfoot{font-size:11px;color:var(--text-dim);padding:8px 12px;border-top:1px solid var(--line)}
+/* Legende de l'echelle de pluie : sans elle, les couleurs ne veulent rien dire. */
+.rainkey{display:flex;align-items:center;gap:0;padding:8px 12px 0;font-size:10px;color:var(--text-dim)}
+.rainkey b{font-weight:700;margin-right:8px;white-space:nowrap}
+.rainkey .band{flex:1;text-align:center;padding:3px 0;color:#fff;font-weight:700}
+.rainkey .band:first-of-type{border-radius:5px 0 0 5px}
+.rainkey .band:last-of-type{border-radius:0 5px 5px 0}
+.rainkey .band.t1{color:#0f172a}
+@media (prefers-color-scheme:dark){ .rainkey .band.t1,.rainkey .band.t3,.rainkey .band.t4{color:#0b1220} }
 .mapwrap{position:relative}
 
 /* Curseur de parcours sous la carte : cran 0 = vue d'ensemble, puis un cran
    par point de passage. Doit rester attrapable au pouce, gants compris. */
 .mapslider{padding:10px 14px 4px;border-top:1px solid var(--line)}
+/* Le curseur se deplace le long du trajet ; les deux boutons qui l'encadrent
+   decalent tout le trajet dans le temps. */
+.slider-row{display:flex;align-items:center;gap:10px}
+.slider-row input[type=range]{flex:1;min-width:0}
+.shift-btn{
+  flex:none;min-width:46px;height:34px;border-radius:10px;
+  font-size:13px;font-weight:700;letter-spacing:-.01em;
+  background:var(--surface-2);color:var(--text);border:1px solid var(--line)
+}
+.shift-btn:active{background:var(--accent);color:#fff;border-color:transparent}
+.slider-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.slider-actions.pending{opacity:.55}
+.chip-toggle.shifted{background:var(--warn-bg);color:var(--warn);border-color:transparent}
 .mapslider input[type=range]{
-  -webkit-appearance:none;appearance:none;width:100%;height:26px;
+  -webkit-appearance:none;appearance:none;width:100%;height:30px;
   background:transparent;display:block;margin:0
 }
 .mapslider input[type=range]::-webkit-slider-runnable-track{
@@ -164,6 +188,25 @@ svg.chart,svg.map{display:block;width:100%;height:auto}
 }
 .slider-rate.t2,.slider-rate.t3,.slider-rate.t4{background:var(--rain-3);color:#fff}
 .slider-rate.t1{background:var(--rain-1);color:var(--text)}
+/* Reperes de la carte : choix d'icone par role. */
+.icon-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.icon-row .k{flex:1;font-size:13px;color:var(--text-dim);min-width:0}
+.icon-picks{display:flex;gap:6px;flex:none}
+.icon-pick{
+  width:36px;height:36px;border-radius:10px;font-size:18px;line-height:1;
+  display:grid;place-items:center;
+  background:var(--surface-2);border:1px solid var(--line)
+}
+.icon-pick[aria-pressed=true]{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset}
+
+/* Reperes Leaflet : l'emoji seul, pose sur une pastille claire. */
+.vm-pin{display:grid;place-items:center;background:none;border:0}
+.vm-pin span{
+  display:grid;place-items:center;width:100%;height:100%;border-radius:50%;
+  background:rgba(255,255,255,.92);border:2px solid var(--accent);
+  font-size:15px;line-height:1
+}
+
 /* Vue d'ensemble : elle melange plusieurs heures, donc pas un cran du curseur. */
 .chip-toggle{
   display:inline-flex;align-items:center;gap:6px;margin:2px 0 6px;

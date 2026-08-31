@@ -208,6 +208,40 @@
     }
   };
 
+  /**
+   * Icônes des trois repères de la carte. Par défaut 🏠 / 🏢 / 🚴 : trois formes
+   * franchement différentes, là où les pastilles colorées d'avant ne se
+   * distinguaient que par leur remplissage — illisible à côté l'une de l'autre.
+   */
+  var MARKER_SETS = {
+    start:  ['🏠', '🚩', '🟢', '🚴', '📍'],
+    end:    ['🏢', '🏁', '🔴', '🎯', '📍'],
+    cursor: ['🚴', '🔵', '⏱️', '👤', '📍']
+  };
+
+  var markers = { start: '🏠', end: '🏢', cursor: '🚴' };
+
+  function setMarkers(m) {
+    ['start', 'end', 'cursor'].forEach(function (k) {
+      if (m && m[k] && MARKER_SETS[k].indexOf(m[k]) >= 0) markers[k] = m[k];
+    });
+  }
+  function markerSets() { return MARKER_SETS; }
+  function markerFor(role) { return markers[role]; }
+
+  /**
+   * Un repère : pastille claire puis émoji par-dessus. La pastille détache
+   * l'icône du fond de carte, qui peut être aussi bien une forêt qu'un rond-point.
+   */
+  function markerSvg(pt, role, size) {
+    var r = size || 13;
+    return '<circle cx="' + pt[0].toFixed(1) + '" cy="' + pt[1].toFixed(1) + '" r="' + r +
+        '" fill="rgba(255,255,255,.92)" stroke="var(--accent)" stroke-width="2"/>' +
+      '<text x="' + pt[0].toFixed(1) + '" y="' + pt[1].toFixed(1) + '" text-anchor="middle" ' +
+        'dominant-baseline="central" font-size="' + (r * 1.15).toFixed(0) + '">' +
+        esc(markers[role]) + '</text>';
+  }
+
   var basemap = 'osm';
   function setBasemap(key) { basemap = BASEMAPS[key] ? key : 'osm'; }
 
@@ -323,13 +357,35 @@
    * mosaïque de disques — ce qui donnerait à la grille une précision qu'elle
    * n'a pas (maille de ~2 km).
    */
+  var RAIN_ALPHA = [0, 0.34, 0.44, 0.54, 0.62];
+
+  /** Bornes de l'échelle météo usuelle, en mm/h, alignées sur `rainTier`. */
+  var RAIN_BANDS = [
+    { tier: 1, label: 'bruine' },
+    { tier: 2, label: '1' },
+    { tier: 3, label: '2,5' },
+    { tier: 4, label: '7,6+' }
+  ];
+
+  /** Légende de l'échelle, sans laquelle les couleurs ne veulent rien dire. */
+  function rainKey() {
+    if (!field.available) return '';
+    var bands = RAIN_BANDS.map(function (b) {
+      return '<span class="band t' + b.tier + '" style="background:var(--rain-' + b.tier + ')">' +
+        esc(b.label) + '</span>';
+    }).join('');
+    return '<div class="rainkey"><b>Pluie mm/h</b>' + bands + '</div>';
+  }
+
   function fieldSvg(cells, px, spacingPx) {
     var blobs = cells.filter(function (c) { return c.rate >= 0.05; }).map(function (c) {
       var p = px([c.lat, c.lon]);
       var tier = rainTier(c.rate);
-      // L'opacité sature vite : au-delà de l'averse modérée, plus sombre
-      // n'apprend rien de plus et on ne lit plus les rues dessous.
-      var op = Math.min(0.6, 0.1 + c.rate * 0.1);
+      // Opacité **fixée par palier**, pas proportionnelle à l'intensité : une
+      // rampe continue saturait dès 5 mm/h, ce qui rendait « forte » et « très
+      // forte » identiques. C'est la teinte qui porte l'information, l'opacité
+      // se contente de laisser lire les rues dessous.
+      var op = RAIN_ALPHA[tier];
       return '<circle cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1) +
         '" r="' + (spacingPx * 0.62).toFixed(1) + '" fill="var(--rain-' + Math.max(1, tier) + ')" opacity="' + op.toFixed(2) + '"/>';
     }).join('');
@@ -360,15 +416,16 @@
 
     var a = pxPoints[0], b = pxPoints[pxPoints.length - 1];
 
-    // Point sélectionné par le curseur : plus gros que les marqueurs de départ
-    // et d'arrivée, pour rester repérable même posé juste à côté de l'un d'eux.
-    var mark = '';
+    // Point sélectionné par le curseur. Aux deux extrémités il tombe pile sur le
+    // repère de départ ou d'arrivée : on n'y met alors que le halo, sinon
+    // l'icône de position masquerait celle qu'on cherche justement à distinguer.
+    var halo = '', mark = '';
     if (cursor !== null && cursor !== undefined && pxPoints[cursor]) {
       var c = pxPoints[cursor];
-      mark = '<circle cx="' + c[0].toFixed(1) + '" cy="' + c[1].toFixed(1) +
-        '" r="12" fill="var(--accent)" opacity=".25"/>' +
-        '<circle cx="' + c[0].toFixed(1) + '" cy="' + c[1].toFixed(1) +
-        '" r="6.5" fill="#fff" stroke="var(--accent)" stroke-width="4"/>';
+      var onEnd = cursor === 0 || cursor === pxPoints.length - 1;
+      halo = '<circle cx="' + c[0].toFixed(1) + '" cy="' + c[1].toFixed(1) +
+        '" r="' + (onEnd ? 21 : 20) + '" fill="var(--accent)" opacity="' + (onEnd ? '.32' : '.22') + '"/>';
+      if (!onEnd) mark = markerSvg(c, 'cursor', 14);
     }
 
     var cellSvg = cells.map(function (c, i) {
@@ -381,9 +438,9 @@
       '<defs>' + cellDefs(cells) + '</defs>' + cellSvg + (rain || '') +
       '<path d="' + d + '" fill="none" stroke="rgba(255,255,255,.75)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>' +
       '<path d="' + d + '" fill="none" stroke="var(--accent)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>' +
-      '<circle cx="' + a[0].toFixed(1) + '" cy="' + a[1].toFixed(1) + '" r="7" fill="#fff" stroke="var(--accent)" stroke-width="3"/>' +
-      '<circle cx="' + b[0].toFixed(1) + '" cy="' + b[1].toFixed(1) + '" r="7" fill="var(--accent)" stroke="#fff" stroke-width="3"/>' +
-      mark +
+      // Le halo passe sous les repères : aux extrémités il doit entourer l'icône
+      // de départ ou d'arrivée, pas la recouvrir.
+      halo + markerSvg(a, 'start') + markerSvg(b, 'end') + mark +
     '</svg>';
   }
 
@@ -691,9 +748,16 @@
     L.polyline(line, { color: '#fff', weight: 8, opacity: 0.75, lineCap: 'round', lineJoin: 'round' }).addTo(map);
     L.polyline(line, { color: cssVar('--accent'), weight: 4, lineCap: 'round', lineJoin: 'round' }).addTo(map);
 
+    var pin = function (role, size) {
+      return L.divIcon({
+        className: 'vm-pin', iconSize: [size, size], iconAnchor: [size / 2, size / 2],
+        html: '<span>' + esc(markerFor(role)) + '</span>'
+      });
+    };
+
     var a = data.points[0], b = data.points[data.points.length - 1];
-    L.circleMarker(a, { radius: 7, color: cssVar('--accent'), weight: 3, fillColor: '#fff', fillOpacity: 1 }).addTo(map);
-    L.circleMarker(b, { radius: 7, color: '#fff', weight: 3, fillColor: cssVar('--accent'), fillOpacity: 1 }).addTo(map);
+    L.marker(a, { icon: pin('start', 28), keyboard: false }).addTo(map);
+    L.marker(b, { icon: pin('end', 28), keyboard: false }).addTo(map);
 
     map.fitBounds(L.latLngBounds(line), { padding: [14, 14] });
 
@@ -729,7 +793,7 @@
           L.circle([c.lat, c.lon], {
             pane: 'rain', radius: metres * 0.78, stroke: false,
             fillColor: cssVar('--rain-' + Math.max(1, rainTier(c.rate))),
-            fillOpacity: Math.min(0.6, 0.1 + c.rate * 0.1)
+            fillOpacity: RAIN_ALPHA[rainTier(c.rate)]
           }).addTo(rain);
         });
         // Le flou se règle en pixels écran : il doit suivre le zoom courant.
@@ -740,11 +804,7 @@
 
       if (cursor) { map.removeLayer(cursor); cursor = null; }
       var pt = !overviewOn && data.points[frame];
-      if (pt) {
-        cursor = L.circleMarker(pt, {
-          radius: 6.5, color: cssVar('--accent'), weight: 4, fillColor: '#fff', fillOpacity: 1
-        }).addTo(map);
-      }
+      if (pt) cursor = L.marker(pt, { icon: pin('cursor', 32), keyboard: false, zIndexOffset: 500 }).addTo(map);
     };
 
     map.on('zoomend', el._redraw);
@@ -829,6 +889,7 @@
     return '' +
       '<section class="card mapwrap">' +
         '<div class="mapcanvas" data-map="' + id + '"></div>' +
+        rainKey() +
         timeSlider(route) +
         // En surimpression, l'étiquette masquait le marqueur quand le trajet
         // arrivait dans ce coin : elle est sous la carte.
@@ -849,13 +910,34 @@
     if (!field.available || !field.frames || field.frames.length !== pts.length || pts.length < 2) return '';
 
     return '<div class="mapslider" data-slider>' +
-      '<input type="range" min="0" max="' + (pts.length - 1) + '" step="1" ' +
-        'value="' + Math.min(frame, pts.length - 1) + '" ' +
-        'aria-label="Heure de passage sur le trajet">' +
+      // Les deux boutons décalent tout le trajet dans le temps ; le curseur, lui,
+      // se déplace le long du trajet. Deux gestes voisins, deux effets distincts,
+      // d'où les libellés explicites en minutes.
+      '<div class="slider-row">' +
+        '<button type="button" class="shift-btn" data-shift="-10" aria-label="Partir 10 minutes plus tôt">−10</button>' +
+        '<input type="range" min="0" max="' + (pts.length - 1) + '" step="1" ' +
+          'value="' + Math.min(frame, pts.length - 1) + '" ' +
+          'aria-label="Heure de passage sur le trajet">' +
+        '<button type="button" class="shift-btn" data-shift="10" aria-label="Partir 10 minutes plus tard">+10</button>' +
+      '</div>' +
       '<div class="slider-lbl" data-slider-label>' + sliderLabel(route) + '</div>' +
-      '<button class="chip-toggle" data-overview aria-pressed="' + overviewOn + '">' +
-        '🗺️ Vue d’ensemble du trajet</button>' +
+      '<div class="slider-actions">' +
+        '<button class="chip-toggle" data-overview aria-pressed="' + overviewOn + '">' +
+          '🗺️ Vue d’ensemble</button>' +
+        shiftChip() +
+      '</div>' +
     '</div>';
+  }
+
+  // Décalage du départ demandé depuis la carte, en minutes. Renseigné par app.js.
+  var shiftMin = 0;
+  function setShift(m) { shiftMin = +m || 0; }
+
+  /** Rappel du décalage en cours, avec de quoi revenir à l'horaire habituel. */
+  function shiftChip() {
+    if (!shiftMin) return '';
+    return '<button class="chip-toggle shifted" data-shift="0" aria-pressed="true">' +
+      '⏱️ ' + (shiftMin > 0 ? '+' : '−') + Math.abs(shiftMin) + ' min · annuler</button>';
   }
 
   /** Ce que dit le curseur à sa position courante. */
@@ -958,6 +1040,7 @@
     rainChart: rainChart, radarMap: radarMap, mountMaps: mountMaps, routeSummary: routeSummary,
     setField: setField, setFrame: setFrame, setOverview: setOverview,
     setBasemap: setBasemap, basemapKeys: basemapKeys, basemapName: basemapName,
-    setEngine: setEngine, engineKeys: engineKeys
+    setEngine: setEngine, engineKeys: engineKeys,
+    setShift: setShift, setMarkers: setMarkers, markerSets: markerSets
   };
 })(window, document);

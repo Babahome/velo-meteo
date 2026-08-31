@@ -4,7 +4,7 @@ Météo (pluie, vent) sur le trajet vélotaf du matin et du soir.
 
 | Add-on | Version | Port | État |
 |---|---|---|---|
-| [`velo-meteo`](velo-meteo/) | 0.7.0 | 8100 | Carte nette, deux moteurs, GPX |
+| [`velo-meteo`](velo-meteo/) | 0.8.0 | 8100 | Carte lisible, décalage horaire, GPX |
 
 Renseigne ton domicile, ton lieu de travail et tes horaires dans l'onglet Réglages :
 l'add-on géocode les adresses, calcule ton itinéraire vélo réel et affiche les prévisions

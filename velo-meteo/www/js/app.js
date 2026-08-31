@@ -66,11 +66,20 @@
     field: { available: false, cells: [] },
     demoRain: localStorage.getItem('vm.demo-rain') === '1',
     basemap: localStorage.getItem('vm.basemap') || 'osm',
-    engine: localStorage.getItem('vm.engine') || 'maison'
+    engine: localStorage.getItem('vm.engine') || 'maison',
+    // Décalage temporaire du départ, en minutes. Volontairement non persisté :
+    // c'est un « et si je partais 20 minutes plus tard », pas un réglage.
+    shift: 0,
+    markers: {
+      start: localStorage.getItem('vm.icon.start') || '🏠',
+      end: localStorage.getItem('vm.icon.end') || '🏢',
+      cursor: localStorage.getItem('vm.icon.cursor') || '🚴'
+    }
   };
 
   UI.setBasemap(state.basemap);
   UI.setEngine(state.engine);
+  UI.setMarkers(state.markers);
 
   function currentTrip() {
     if (state.trip) return state.trip;
@@ -99,16 +108,19 @@
     });
   }
 
+  /** Suffixe de décalage, ajouté à toute requête qui dépend de l'heure de départ. */
+  function sh() { return state.shift ? '&shift=' + state.shift : ''; }
+
   var api = {
-    route: function (t) { return get('/api/route?type=' + t, function () { return MOCK.route(t); }); },
-    weather: function (t) { return get('/api/weather?type=' + t, function () { return MOCK.weather(t); }); },
-    wind: function (t) { return get('/api/wind?type=' + t, function () { return MOCK.wind(t); }); },
+    route: function (t) { return get('/api/route?type=' + t + sh(), function () { return MOCK.route(t); }); },
+    weather: function (t) { return get('/api/weather?type=' + t + sh(), function () { return MOCK.weather(t); }); },
+    wind: function (t) { return get('/api/wind?type=' + t + sh(), function () { return MOCK.wind(t); }); },
     windows: function (t) { return get('/api/stats/windows?type=' + t, function () { return MOCK.windows(t); }); },
     history: function () { return get('/api/stats/history', function () { return MOCK.history(); }); },
     options: function () { return get('/api/options', function () { return MOCK.options; }); },
     trip: function () { return get('/api/trip', function () { return MOCK.trip; }); },
     field: function (t) {
-      return get('/api/radar?type=' + t + (state.demoRain ? '&demo=1' : ''),
+      return get('/api/radar?type=' + t + sh() + (state.demoRain ? '&demo=1' : ''),
                  function () { return { available: false, cells: [] }; });
     }
   };
@@ -371,6 +383,34 @@
     return '<span class="muted">Aucune trace importée.</span>';
   }
 
+  var MARKER_ROLES = [
+    { key: 'start', label: 'Départ' },
+    { key: 'end', label: 'Arrivée' },
+    { key: 'cursor', label: 'Position sur le trajet' }
+  ];
+
+  /** Carte « Repères de la carte » de la page Réglages. */
+  function markersCard() {
+    var sets = UI.markerSets();
+    var rows = MARKER_ROLES.map(function (r) {
+      var picks = sets[r.key].map(function (ic) {
+        return '<button type="button" class="icon-pick" data-icon-role="' + r.key + '" ' +
+          'data-icon="' + esc(ic) + '" aria-pressed="' + (state.markers[r.key] === ic) + '">' +
+          esc(ic) + '</button>';
+      }).join('');
+      return '<div class="icon-row"><span class="k">' + esc(r.label) + '</span>' +
+        '<span class="icon-picks">' + picks + '</span></div>';
+    }).join('');
+
+    return '<section class="card">' +
+        '<div class="card-pad" style="padding-bottom:4px"><div class="card-title">Repères de la carte</div></div>' +
+        '<div class="card-pad" style="padding-top:0">' + rows + '</div>' +
+        '<div class="card-pad" style="padding-top:0"><div class="note">Départ, arrivée et position sur le trajet ' +
+        'ont chacun leur icône. Par défaut 🏠 / 🏢 / 🚴 : trois formes franchement différentes, ' +
+        'là où trois pastilles de couleur se ressemblaient trop.</div></div>' +
+      '</section>';
+  }
+
   /** Carte « Fond de carte » de la page Réglages. */
   function basemapCard() {
     var opts = UI.basemapKeys().map(function (k) {
@@ -428,7 +468,7 @@
           '<button class="opt" data-action="toggle-demo-rain" aria-checked="' + state.demoRain + '" role="checkbox">' +
             '<span class="mark"></span>' +
             '<span><span class="t">Simuler une averse</span>' +
-            '<span class="d">Pose une averse fictive au milieu du trajet, pour juger le rendu sans attendre la vraie pluie. Le verdict et les chiffres ne changent pas.</span></span>' +
+            '<span class="d">Fait traverser la carte à une averse fictive, de la bruine à l’averse forte, pour juger le rendu et l’échelle de couleur sans attendre la vraie pluie. Le verdict et les chiffres ne changent pas.</span></span>' +
           '</button>' +
         '</div>' +
         '<div class="card-pad"><div class="small muted">' + etat + '</div>' +
@@ -542,12 +582,13 @@
         '</section>' +
 
         basemapCard() +
+        markersCard() +
         radarCard() +
 
         '<section class="card">' +
           '<div class="card-pad">' +
             '<div class="card-title">État</div>' +
-            '<div class="small muted">Version 0.7.0 · ' +
+            '<div class="small muted">Version 0.8.0 · ' +
               (state.config.configured ? 'trajet réel configuré' : 'aucun trajet : données fictives') +
               (state.offline ? ' · API injoignable' : '') + '.</div>' +
           '</div>' +
@@ -616,6 +657,23 @@
   });
 
   view.addEventListener('click', function (e) {
+    var sb = e.target.closest('[data-shift]');
+    if (sb) {
+      var delta = +sb.getAttribute('data-shift');
+      applyShift(delta === 0 ? 0 : state.shift + delta);
+      return;
+    }
+
+    var ic = e.target.closest('[data-icon-role]');
+    if (ic) {
+      var role = ic.getAttribute('data-icon-role');
+      state.markers[role] = ic.getAttribute('data-icon');
+      localStorage.setItem('vm.icon.' + role, state.markers[role]);
+      UI.setMarkers(state.markers);
+      render(true);
+      return;
+    }
+
     var eng = e.target.closest('.opt[data-engine]');
     if (eng) {
       state.engine = eng.getAttribute('data-engine');
@@ -655,6 +713,25 @@
       refreshField().then(function () { render(true); });
     }
   });
+
+  /**
+   * Décale tout le trajet dans le temps. Chaque cran relance les prévisions :
+   * on groupe les clics rapprochés pour ne pas enchaîner les requêtes pendant
+   * qu'on martèle le bouton.
+   */
+  var shiftTimer = null;
+
+  function applyShift(minutes) {
+    state.shift = Math.max(-120, Math.min(120, minutes));
+    UI.setShift(state.shift);
+
+    if (shiftTimer) clearTimeout(shiftTimer);
+    shiftTimer = setTimeout(function () { shiftTimer = null; render(true); }, 320);
+
+    // Retour immédiat sur le bouton, sans attendre le réseau.
+    var chip = view.querySelector('.slider-actions');
+    if (chip) chip.classList.toggle('pending', true);
+  }
 
   function importGpx() {
     var g = state.gpx;

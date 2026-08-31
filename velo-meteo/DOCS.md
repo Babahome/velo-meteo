@@ -161,11 +161,26 @@ zoom au-dessus et pose les tuiles à demi-taille. Les deux moteurs le font (`til
 côté maison, `detectRetina` côté Leaflet). Ce qui change entre eux, c'est le confort de
 manipulation et l'écosystème de contrôles, pas la netteté.
 
+### Les repères
+
+🏠 le départ, 🏢 l'arrivée, 🚴 la position choisie au curseur. Trois formes franchement
+différentes : trois pastilles de couleur, elles, se ressemblaient trop sur un fond de
+carte. Chacun se change dans **Réglages → Repères de la carte**.
+
+Aux deux extrémités du curseur, la position tombe exactement sur le départ ou l'arrivée :
+seul le halo est alors dessiné, pour ne pas masquer l'icône qu'on cherche à distinguer.
+
 ### Les nuages de pluie
 
 Par-dessus la carte, les précipitations **à l'heure où tu passes**. Une grille d'environ
 900 m est échantillonnée autour du trajet chez Open-Meteo, chaque case à l'horaire du
 point de passage le plus proche, et le résultat est dessiné en taches floues.
+
+La couleur suit l'**échelle météo usuelle**, rappelée par la légende sous la carte :
+bruine sous 1 mm/h, modérée à partir de 1, forte à partir de 2,5, très forte au-delà de
+7,6. La rampe traverse la teinte (cyan → bleu → violet → magenta) plutôt que de rester
+dans les bleus, et l'opacité est fixe par palier : sur un fond de carte déjà coloré et
+sous un flou, quatre bleus se confondent, quatre teintes non.
 
 C'est une **prévision**, pas une image radar, et c'est délibéré : un radar montre ce qui
 tombe maintenant, alors que le reste de l'écran (verdict, profil, créneaux) parle de
@@ -191,7 +206,13 @@ les chiffres, eux, ne bougent pas.
 ### Le curseur de parcours
 
 Sous la carte, un curseur déplace un point le long du trajet. Il est **purement
-temporel** : un cran par point de passage, du départ à l'arrivée. Le marqueur se pose sur
+temporel** : un cran par point de passage, du départ à l'arrivée.
+
+Les boutons `−10` et `+10` qui l'encadrent font autre chose : ils **décalent tout le
+trajet dans le temps**, par pas de 10 minutes, même durée, et relancent les prévisions.
+Utile pour « et si je partais vingt minutes plus tard ». Le décalage n'est pas
+enregistré — l'horaire de `/data` n'est jamais touché — et un rappel permet de revenir à
+l'horaire habituel. Le marqueur se pose sur
 le point et toute la carte bascule sur **l'heure où tu y seras**. On voit ainsi l'averse
 arriver ou s'éloigner au fil du parcours ; le libellé donne l'heure, le lieu et
 l'intensité à cet endroit.

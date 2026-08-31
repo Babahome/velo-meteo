@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.8.0 — Échelle de pluie lisible, décalage du départ, repères distincts
+
+- **L'échelle de couleur de la pluie est refaite.** Elle était calibrée en opacité
+  proportionnelle à l'intensité, ce qui saturait dès 5 mm/h : « forte » et « très forte »
+  s'affichaient à l'identique, et les quatre paliers étaient quatre bleus qui se
+  confondaient sous le flou. Désormais la rampe traverse la teinte — cyan, bleu, violet,
+  magenta — et l'opacité est fixée par palier. C'est la teinte qui porte l'information.
+  - **Une légende** sous la carte donne les bornes en mm/h : sans elle, les couleurs ne
+    voulaient rien dire.
+  - L'averse simulée monte maintenant à 14 mm/h et traverse les quatre paliers, ce qu'il
+    faut pour juger le dégradé.
+
+- **Décaler le départ** avec deux boutons `−10` / `+10` de part et d'autre du curseur :
+  tout le trajet se déplace dans le temps, même durée, et les prévisions sont recalculées.
+  Un rappel affiche le décalage en cours et permet de revenir à l'horaire habituel.
+  - Le décalage est **volontairement non enregistré** : c'est un « et si je partais vingt
+    minutes plus tard », pas un réglage. L'horaire de `/data` n'est jamais touché.
+  - Les clics rapprochés sont groupés : marteler le bouton ne déclenche qu'une requête.
+
+- **Repères distincts sur la carte** : 🏠 départ, 🏢 arrivée, 🚴 position. Trois formes
+  franchement différentes, là où trois pastilles ne se distinguaient que par leur
+  remplissage. Chacun est personnalisable dans Réglages → Repères de la carte, parmi cinq
+  icônes.
+  - Aux deux extrémités, la position tombe pile sur le départ ou l'arrivée : seul le halo
+    est dessiné, pour ne pas masquer l'icône qu'on cherche justement à distinguer.
+
 ## 0.7.0 — Tuiles nettes, et Leaflet en second moteur
 
 - **La carte n'est plus floue sur téléphone.** Les tuiles étaient posées à leur taille

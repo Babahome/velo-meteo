@@ -27,6 +27,7 @@ const { TRIPS } = require('./mock-data');
 router.get('/', async (req, res) => {
   const type = req.query.type === 'evening' ? 'evening' : 'morning';
   const demo = req.query.demo === '1';
+  const shift = forecast.cleanShift(req.query.shift);
 
   // Le mode démo doit marcher aussi sans trajet configuré : c'est justement
   // là qu'on regarde le rendu avant d'avoir renseigné quoi que ce soit.
@@ -37,12 +38,14 @@ router.get('/', async (req, res) => {
     const hhmm = configured
       ? (type === 'evening' ? trip.evening_time : trip.morning_time)
       : TRIPS[type].departure;
-    const field = forecast.demoField(route, hhmm);
+    // Le décalage vaut aussi pour l'averse simulée : sans ça, les horaires du
+    // curseur mentiraient dès qu'on touche aux boutons ±10 min.
+    const field = forecast.demoField(route, hhmm, shift);
     return res.json(Object.assign({ available: true, source: 'demo', error: null }, field));
   }
 
   try {
-    const field = await forecast.getField(type);
+    const field = await forecast.getField(type, shift);
     if (!field) return res.json({ available: false, source: 'mock', error: null, cells: [] });
     res.json(Object.assign({ available: true, source: 'open-meteo', error: null }, field));
   } catch (e) {

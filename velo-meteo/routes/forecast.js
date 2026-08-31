@@ -36,7 +36,7 @@ function isoLocal(d, roundMin) {
  * On reste sur aujourd'hui tant que l'heure de départ n'est pas dépassée de
  * plus de 2 h — au-delà, c'est le trajet de demain qui intéresse.
  */
-function nextDeparture(hhmm, utcOffsetSec) {
+function nextDeparture(hhmm, utcOffsetSec, shiftMin) {
   const parts = String(hhmm || '08:00').split(':');
   const localNow = new Date(Date.now() + utcOffsetSec * 1000);
   const dep = new Date(Date.UTC(
@@ -44,7 +44,17 @@ function nextDeparture(hhmm, utcOffsetSec) {
     parseInt(parts[0], 10) || 0, parseInt(parts[1], 10) || 0
   ));
   if (dep.getTime() < localNow.getTime() - 2 * 3600 * 1000) dep.setUTCDate(dep.getUTCDate() + 1);
+
+  // Décalage temporaire demandé depuis la carte : il déplace tout le trajet,
+  // sans toucher à l'horaire enregistré dans /data.
+  if (shiftMin) dep.setTime(dep.getTime() + shiftMin * 60000);
   return dep;
+}
+
+/** Le décalage vient de l'URL : borné à ±2 h et arrondi au pas de 5 minutes. */
+function cleanShift(v) {
+  const n = Math.round((parseFloat(v) || 0) / 5) * 5;
+  return Math.max(-120, Math.min(120, n));
 }
 
 function angleDiff(a, b) {
@@ -129,7 +139,7 @@ async function fetchForecast(points) {
 
 /* ---------- assemblage ---------- */
 
-async function compute(type) {
+async function compute(type, shift) {
   const trip = store.getTrip();
   if (!store.isConfigured(trip)) return null;
 
@@ -138,7 +148,7 @@ async function compute(type) {
   const locs  = await fetchForecast(route.points);
 
   const offset = locs[0].utc_offset_seconds || 0;
-  const dep    = nextDeparture(hhmm, offset);
+  const dep    = nextDeparture(hhmm, offset, shift);
 
   const points = route.points.map((p, i) => {
     const loc = locs[i];
@@ -197,7 +207,9 @@ async function compute(type) {
     route: {
       id: type, type: type,
       name: type === 'morning' ? homeName + ' → ' + workName : workName + ' → ' + homeName,
-      departure: hhmm,
+      departure: pad(dep.getUTCHours()) + ':' + pad(dep.getUTCMinutes()),
+      departure_usual: hhmm,
+      shift_min: shift || 0,
       duration_min: route.duration_min,
       distance_km: route.distance_km,
       points: route.points.map(p => ({ i: p.i, time: points[p.i].time, label: p.label, lat: p.lat, lon: p.lon, x: p.x, y: p.y })),
@@ -223,15 +235,15 @@ async function compute(type) {
 }
 
 /** Renvoie les données réelles, ou null si aucun trajet n'est configuré. */
-async function getTripData(type) {
+async function getTripData(type, shift) {
   const trip = store.getTrip();
   if (!store.isConfigured(trip)) return null;
 
-  const key = type + '|' + (trip.updated_at || '');
+  const key = type + '|' + (shift || 0) + '|' + (trip.updated_at || '');
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.data;
 
-  const data = await compute(type);
+  const data = await compute(type, shift);
   cache.set(key, { at: Date.now(), data: data });
   return data;
 }
@@ -371,10 +383,10 @@ const GRID_MAX_SIDE = 7;    // 49 points au maximum dans la requête Open-Meteo
  * contient toutes, et le curseur de la carte peut alors passer de l'une à
  * l'autre sans aller-retour réseau. `cells` reste la vue d'ensemble.
  */
-async function computeField(route, hhmm) {
+async function computeField(route, hhmm, shift) {
   const grid = buildGrid(route.points, GRID_STEP_M, GRID_MAX_SIDE);
   const locs = await fetchForecast(grid.cells);
-  const dep = nextDeparture(hhmm, locs[0].utc_offset_seconds || 0);
+  const dep = nextDeparture(hhmm, locs[0].utc_offset_seconds || 0, shift);
 
   // precipitation est un cumul sur 15 min : ×4 pour une intensité en mm/h.
   // null quand le créneau n'existe pas dans la réponse : « pas de donnée » et
@@ -415,7 +427,7 @@ async function computeField(route, hhmm) {
  * Elle **traverse** la carte au fil des images : un nuage immobile ne dirait
  * pas si le curseur fait vraiment changer l'heure.
  */
-function demoField(route, hhmm) {
+function demoField(route, hhmm, shift) {
   const grid = buildGrid(route.points, GRID_STEP_M, GRID_MAX_SIDE);
   const pts = route.points;
   const mid = pts[Math.floor(pts.length / 2)];
@@ -423,7 +435,7 @@ function demoField(route, hhmm) {
 
   // Deux heures fictives suffisent : le curseur lit `frames`, pas l'horloge.
   const parts = String(hhmm || '08:00').split(':');
-  const dep = (parseInt(parts[0], 10) || 0) * 60 + (parseInt(parts[1], 10) || 0);
+  const dep = (parseInt(parts[0], 10) || 0) * 60 + (parseInt(parts[1], 10) || 0) + (shift || 0);
 
   // Le jeu de données fictif n'a pas d'`offset_min` : on le reconstitue à
   // partir du rang du point et de la durée du trajet.
@@ -440,12 +452,17 @@ function demoField(route, hhmm) {
     return {
       i: p.i,
       offset_min: offsetOf(p, k),
-      time: p.time || (String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0')),
+      // L'horaire du jeu fictif est repris tel quel, sauf si un décalage est
+      // demandé : il faut alors le recalculer pour qu'il suive les boutons.
+      time: (!shift && p.time) || (String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0')),
       found: true,
       rates: grid.cells.map(c => {
         const d1 = Math.hypot(c.lat - cLat, c.lon - cLon) / spread;
         const d2 = Math.hypot(c.lat - (cLat + spread * 1.6), c.lon - (cLon - spread * 1.6)) / spread;
-        return +(9 * Math.exp(-d1 * d1) + 2.5 * Math.exp(-d2 * d2)).toFixed(2);
+        // Le noyau monte à 14 mm/h et la traîne descend sous 1 : l'averse
+        // simulée traverse ainsi les quatre paliers de l'échelle, ce qu'il faut
+        // pour juger la lisibilité du dégradé.
+        return +(14 * Math.exp(-d1 * d1) + 2 * Math.exp(-d2 * d2)).toFixed(2);
       })
     };
   });
@@ -465,31 +482,31 @@ function demoField(route, hhmm) {
  * externe est indisponible, on retombe sur la maquette plutôt que de casser
  * l'écran — avec la raison, affichée dans l'interface.
  */
-async function safeTripData(type) {
+async function safeTripData(type, shift) {
   const trip = store.getTrip();
   if (!store.isConfigured(trip)) return { data: null, source: 'mock', error: null };
   try {
-    return { data: await getTripData(type), source: 'live', error: null };
+    return { data: await getTripData(type, shift), source: 'live', error: null };
   } catch (e) {
     return { data: null, source: 'mock', error: e.message || String(e) };
   }
 }
 
 /** Champ de pluie mis en cache comme le reste : l'écran d'accueil est bavard. */
-async function getField(type) {
+async function getField(type, shift) {
   const trip = store.getTrip();
   if (!store.isConfigured(trip)) return null;
 
-  const key = 'field|' + type + '|' + (trip.updated_at || '');
+  const key = 'field|' + type + '|' + (shift || 0) + '|' + (trip.updated_at || '');
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.data;
 
-  const data = await computeField(trip.routes[type], type === 'evening' ? trip.evening_time : trip.morning_time);
+  const data = await computeField(trip.routes[type], type === 'evening' ? trip.evening_time : trip.morning_time, shift);
   cache.set(key, { at: Date.now(), data: data });
   return data;
 }
 
 module.exports = {
-  getTripData, getWindows, safeTripData, invalidate, nextDeparture,
+  getTripData, getWindows, safeTripData, invalidate, nextDeparture, cleanShift,
   getField, demoField
 };
