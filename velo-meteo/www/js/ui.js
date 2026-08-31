@@ -121,9 +121,26 @@
 
   /* ---------- graphe mm + % ---------- */
 
-  function rainChart(weather, standalone) {
+  /**
+   * Géométrie du graphe, sortie en constantes : le curseur sous la carte doit
+   * s'aligner au pixel sur les colonnes, et le CSS a besoin des mêmes nombres.
+   */
+  var CHART = { W: 340, H: 158, L: 28, R: 30 };
+
+  /** Fraction de la largeur utile où se trouve le centre de la colonne `i`. */
+  function chartCentre(i, n) {
+    var step = (CHART.W - CHART.L - CHART.R) / n;
+    return (CHART.L + step * i + step / 2) / CHART.W;
+  }
+
+  /**
+   * Contenu du graphe, hors coquille. Isolé parce que la synchronisation le
+   * réécrit à chaque déplacement du curseur : remplacer le `<svg>` lui-même
+   * détruirait le nœud en cours de glissement, donc la capture du pointeur.
+   */
+  function chartInner(weather) {
     // T laisse la place aux valeurs ecrites au-dessus des barres.
-    var W = 340, H = 158, L = 28, R = 30, T = 22, B = 30;
+    var W = CHART.W, H = CHART.H, L = CHART.L, R = CHART.R, T = 22, B = 30;
     var pw = W - L - R, ph = H - T - B;
     var pts = weather.points;
     var maxMm = Math.max(1, Math.ceil(Math.max.apply(null, pts.map(function (p) { return p.rate; }))));
@@ -180,21 +197,31 @@
           p.time + '</text>';
       }
 
-      // Zone de saisie sur toute la hauteur : viser une barre de 2 px au doigt
-      // serait intenable.
-      hits += '<rect class="hit" data-point="' + i + '" x="' + (cx - step / 2).toFixed(1) + '" y="0" ' +
-        'width="' + step.toFixed(1) + '" height="' + H + '" fill="transparent"/>';
+      // Poignée du curseur, posée sur la colonne choisie : le graphe se
+      // manipule directement, sans passer par le curseur du dessous.
+      if (on) {
+        hits = '<line x1="' + cx.toFixed(1) + '" y1="' + (T - 8) + '" x2="' + cx.toFixed(1) + '" y2="' + (T + ph) +
+            '" stroke="var(--accent)" stroke-width="1.5" opacity=".55"/>' +
+          '<circle cx="' + cx.toFixed(1) + '" cy="' + (T - 12) + '" r="6" ' +
+            'fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/>';
+      }
     });
 
+    return band + grid + bars +
+      '<path d="' + line.trim() + '" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
+      dots + xlab + hits;
+  }
+
+  function rainChart(weather, standalone) {
     var open = standalone ? '<section class="card">' : '<div class="chartpane" data-chart>';
     var close = standalone ? '</section>' : '</div>';
 
     return open +
         '<div class="chartbox">' +
-          '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Pluie en mm et probabilité par point">' +
-            band + grid + bars +
-            '<path d="' + line.trim() + '" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
-            dots + xlab + hits +
+          '<svg class="chart" viewBox="0 0 ' + CHART.W + ' ' + CHART.H + '" ' +
+            'data-n="' + weather.points.length + '" ' +
+            'role="img" aria-label="Pluie en mm et probabilité par point">' +
+            chartInner(weather) +
           '</svg>' +
         '</div>' +
         '<div class="legend">' +
@@ -867,11 +894,11 @@
       if (lbl && shown.route) lbl.innerHTML = sliderLabel(shown.route);
     });
 
-    Array.prototype.forEach.call(root.querySelectorAll('[data-chart]'), function (pane) {
-      if (shown.weather) pane.outerHTML = rainChart(shown.weather, false);
+    // Seul l'intérieur du SVG est réécrit : le nœud survit, avec ses écouteurs
+    // et la capture du pointeur si un glissement est en cours.
+    Array.prototype.forEach.call(root.querySelectorAll('[data-chart] svg.chart'), function (svg) {
+      if (shown.weather) svg.innerHTML = chartInner(shown.weather);
     });
-    // outerHTML remplace le nœud : le graphe reconstruit n'a plus d'écouteur.
-    bindChart(root);
 
     Array.prototype.forEach.call(root.querySelectorAll('[data-overview]'), function (b) {
       b.setAttribute('aria-pressed', String(overviewOn));
@@ -921,26 +948,49 @@
     bindChart(scope);
   }
 
-  /** Sélection depuis le graphe. Réattachée à chaque regénération de celui-ci. */
+  /**
+   * Le graphe se manipule directement : on y attrape le curseur et on le glisse.
+   *
+   * La colonne est déduite de l'abscisse, pas d'une zone cliquable : avec la
+   * capture du pointeur, la cible des événements devient le SVG lui-même, et le
+   * doigt peut sortir du graphe sans que le geste s'interrompe.
+   *
+   * `touch-action: pan-y` (CSS) laisse le défilement vertical de la page au
+   * navigateur : on ne prend que l'horizontal, celui du curseur.
+   */
   function bindChart(scope) {
     Array.prototype.forEach.call(scope.querySelectorAll('[data-chart] svg.chart'), function (svg) {
       if (svg._bound) return;
       svg._bound = true;
 
+      var n = +svg.getAttribute('data-n') || 1;
+      var dragging = false;
+
       var pick = function (e) {
-        var t = e.target.closest ? e.target.closest('.hit') : null;
-        if (!t) return;
-        var i = +t.getAttribute('data-point');
+        var r = svg.getBoundingClientRect();
+        if (!r.width) return;
+        var x = ((e.clientX - r.left) / r.width) * CHART.W;      // en unités du viewBox
+        var step = (CHART.W - CHART.L - CHART.R) / n;
+        var i = Math.round((x - CHART.L - step / 2) / step);
+        i = Math.max(0, Math.min(n - 1, i));
         if (!overviewOn && i === frame) return;
         setFrame(i);
         setOverview(false);
         syncSelection(scope);
       };
 
-      svg.addEventListener('pointerdown', pick);
-      svg.addEventListener('pointermove', function (e) {
-        if (e.buttons) pick(e);   // glisser le long du graphe balaie le trajet
+      svg.addEventListener('pointerdown', function (e) {
+        dragging = true;
+        if (svg.setPointerCapture) svg.setPointerCapture(e.pointerId);
+        pick(e);
       });
+      svg.addEventListener('pointermove', function (e) { if (dragging) pick(e); });
+
+      // pointercancel arrive quand le navigateur décide que le geste est un
+      // défilement vertical : il faut lâcher, sinon la page reste bloquée.
+      var stop = function () { dragging = false; };
+      svg.addEventListener('pointerup', stop);
+      svg.addEventListener('pointercancel', stop);
     });
   }
 
@@ -1003,12 +1053,19 @@
       // Les deux boutons décalent tout le trajet dans le temps ; le curseur, lui,
       // se déplace le long du trajet. Deux gestes voisins, deux effets distincts,
       // d'où les libellés explicites en minutes.
-      '<div class="slider-row">' +
-        '<button type="button" class="shift-btn" data-shift="-10" aria-label="Partir 10 minutes plus tôt">−10</button>' +
+      // Le curseur est calé au pixel sur les colonnes du graphe : ses deux
+      // extrémités tombent sur le centre de la première et de la dernière.
+      // C'est ce qui a permis de réduire les boutons aux seuls signes — ils
+      // tiennent maintenant dans les marges de l'axe.
+      '<div class="slider-row" style="--first:' + (chartCentre(0, pts.length) * 100).toFixed(3) + '%;' +
+          '--span:' + ((chartCentre(pts.length - 1, pts.length) - chartCentre(0, pts.length)) * 100).toFixed(3) + '%">' +
+        '<button type="button" class="shift-btn" data-shift="-10" ' +
+          'title="Partir 10 minutes plus tôt" aria-label="Partir 10 minutes plus tôt">−</button>' +
         '<input type="range" min="0" max="' + (pts.length - 1) + '" step="1" ' +
           'value="' + Math.min(frame, pts.length - 1) + '" ' +
           'aria-label="Heure de passage sur le trajet">' +
-        '<button type="button" class="shift-btn" data-shift="10" aria-label="Partir 10 minutes plus tard">+10</button>' +
+        '<button type="button" class="shift-btn" data-shift="10" ' +
+          'title="Partir 10 minutes plus tard" aria-label="Partir 10 minutes plus tard">+</button>' +
       '</div>' +
       '<div class="slider-lbl" data-slider-label>' + sliderLabel(route) + '</div>' +
       shiftChip() +

@@ -221,11 +221,18 @@ même trajet. La légende de l'échelle ouvre le bloc — elle vaut pour la cart
 les barres du graphe, qui partagent la même rampe. Le bouton de vue d'ensemble et les
 crédits sont posés en surimpression dans les coins bas de la carte, gauche et droite.
 
-Et ils sont **synchronisés** : déplacer le curseur, cliquer une colonne du graphe ou
-glisser le long de celui-ci désigne le même point. Le marqueur de la carte, la position
-du curseur et la colonne mise en avant suivent ensemble. Les zones de saisie du graphe
-couvrent toute la hauteur d'une colonne — viser une barre de deux pixels au doigt serait
-intenable.
+Et ils sont **synchronisés** : déplacer le curseur, ou attraper la poignée posée sur le
+graphe et la faire glisser, désigne le même point. Le marqueur de la carte, la position
+du curseur et la colonne mise en avant suivent ensemble.
+
+Le curseur est **aligné au pixel sur les colonnes** : ses deux extrémités tombent sur le
+centre de la première et de la dernière, chaque cran intermédiaire sur la sienne. C'est
+pour cela que les boutons de décalage n'affichent que `−` et `+` : réduits, ils tiennent
+dans les marges de l'axe au lieu de rogner dessus.
+
+Sur le graphe, la colonne est déduite de l'abscisse du doigt et le pointeur est capturé :
+le geste continue même si le doigt sort du cadre. `touch-action: pan-y` laisse le
+défilement vertical de la page au navigateur.
 
 ### Le curseur de parcours
 

@@ -161,7 +161,9 @@ svg.chart,svg.map{display:block;width:100%;height:auto}
 /* Graphe imbrique dans la carte : pas de cadre propre, il prolonge le curseur. */
 .chartpane{border-top:1px solid var(--line)}
 .chartpane .legend{padding-bottom:4px}
-svg.chart .hit{cursor:pointer}
+/* Le graphe capte le geste horizontal (le curseur) et laisse le vertical au
+   navigateur (le defilement de la page). */
+svg.chart{cursor:ew-resize;touch-action:pan-y}
 /* Legende de l'echelle de pluie : sans elle, les couleurs ne veulent rien dire. */
 .rainkey{display:flex;align-items:center;gap:0;padding:10px 12px;font-size:10px;color:var(--text-dim)}
 .rainkey b{font-weight:700;margin-right:8px;white-space:nowrap}
@@ -174,16 +176,29 @@ svg.chart .hit{cursor:pointer}
 
 /* Curseur de parcours sous la carte : cran 0 = vue d'ensemble, puis un cran
    par point de passage. Doit rester attrapable au pouce, gants compris. */
-.mapslider{padding:10px 14px 4px;border-top:1px solid var(--line)}
+/* Meme retrait lateral que le graphe : c'est ce qui permet d'aligner le
+   curseur sur l'axe des abscisses. */
+.mapslider{padding:10px 8px 4px;border-top:1px solid var(--line)}
 /* Le curseur se deplace le long du trajet ; les deux boutons qui l'encadrent
-   decalent tout le trajet dans le temps. */
-.slider-row{display:flex;align-items:center;gap:10px}
-.slider-row input[type=range]{flex:1;min-width:0}
+   decalent tout le trajet dans le temps.
+   --first et --span viennent du JS : ce sont la position du centre de la
+   premiere colonne du graphe et l'ecart jusqu'a la derniere. Le pouce du
+   curseur parcourt donc exactement le meme intervalle que les colonnes. */
+.slider-row{position:relative;height:34px;--thumb:26px}
+/* Selecteur plus specifique que la regle generale `.mapslider input[type=range]`
+   plus bas, qui impose width:100% et ecraserait le calage. */
+.mapslider .slider-row input[type=range]{
+  position:absolute;top:4px;
+  left:calc(var(--first) - var(--thumb) / 2);
+  width:calc(var(--span) + var(--thumb))
+}
 .shift-btn{
-  flex:none;min-width:46px;height:34px;border-radius:10px;
-  font-size:13px;font-weight:700;letter-spacing:-.01em;
+  position:absolute;top:0;width:30px;height:34px;border-radius:10px;
+  font-size:19px;font-weight:700;line-height:1;
   background:var(--surface-2);color:var(--text);border:1px solid var(--line)
 }
+.shift-btn[data-shift="-10"]{left:0}
+.shift-btn[data-shift="10"]{right:0}
 .shift-btn:active{background:var(--accent);color:#fff;border-color:transparent}
 .slider-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .mapslider .slider-lbl{padding-bottom:6px}

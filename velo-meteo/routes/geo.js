@@ -9,7 +9,7 @@
  */
 'use strict';
 
-const UA = 'velo-meteo-hassio-addon/0.10.0 (Home Assistant add-on; personal use)';
+const UA = 'velo-meteo-hassio-addon/0.11.0 (Home Assistant add-on; personal use)';
 
 const NOMINATIM = 'https://nominatim.openstreetmap.org/search';
 const REVERSE   = 'https://nominatim.openstreetmap.org/reverse';

@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.11.0 — Le curseur se cale sur le graphe, et s'y attrape
+
+- **Les boutons de décalage n'affichent plus que `−` et `+`.** Ce n'est pas qu'esthétique :
+  c'est ce qui a libéré la place nécessaire au point suivant.
+- **Le curseur est aligné au pixel sur les colonnes du graphe.** Ses deux extrémités
+  tombent exactement sur le centre de la première et de la dernière colonne, et chaque
+  cran intermédiaire sur la sienne — écart mesuré nul sur les huit crans. Les boutons
+  réduits tiennent désormais dans les marges de l'axe, de part et d'autre.
+- **Le graphe s'attrape directement** : une poignée et un trait vertical marquent la
+  colonne choisie, et on la fait glisser d'un bout à l'autre. Curseur, carte et graphe
+  restent synchronisés, comme avant.
+
+Deux points qui rendent le glissement fiable plutôt que fragile :
+
+- La colonne est déduite de l'**abscisse du doigt**, pas d'une zone cliquable. Avec la
+  capture du pointeur, la cible des événements devient le graphe lui-même : le doigt peut
+  sortir du cadre sans que le geste s'interrompe.
+- La synchronisation ne réécrit plus que **l'intérieur** du `<svg>`. Remplacer le nœud,
+  comme avant, le détruisait en cours de glissement — et avec lui la capture du pointeur,
+  donc le geste dès le premier déplacement.
+
+`touch-action: pan-y` laisse le défilement vertical de la page au navigateur : le graphe
+ne prend que l'horizontal, celui du curseur.
+
 ## 0.10.0 — L'averse simulée arrose tout l'écran
 
 L'averse de test ne colorait que la carte : le graphe, le profil et le verdict continuaient
