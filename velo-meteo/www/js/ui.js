@@ -172,14 +172,50 @@
       '</section>';
   }
 
-  /* ---------- carte : fond de tuiles OSM + tracé ---------- */
-  /* Pas de MapLibre : la carte n'est ni déplaçable ni zoomable, elle cadre le
-     trajet et c'est tout. Poser les tuiles à la main coûte ~70 lignes contre
-     ~800 ko de bibliothèque à embarquer dans l'image Docker. */
+  /* ---------- carte : fond de tuiles + tracé ---------- */
+  /* Carte déplaçable et zoomable, sans bibliothèque carto. Leaflet ou MapLibre
+     auraient imposé d'embarquer 45 à 200 ko dans l'image Docker et de refaire
+     tout le calque (tracé, nuages, curseur) dans leur système de coordonnées.
+     Le déplacement et le zoom tiennent ici en ~120 lignes et réutilisent la
+     projection déjà en place. */
 
-  var TILE_URL  = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+  /**
+   * Fonds disponibles. Les tuiles IGN passent par la Géoplateforme, **sans clé
+   * d'API** et dans la même grille Web Mercator que l'OSM (TILEMATRIXSET=PM) :
+   * elles se substituent à l'URL, rien d'autre à changer. Licence Ouverte
+   * Etalab, mention obligatoire. Le Scan 25 (carte de rando) n'est pas dans
+   * l'accès libre, il répond 400.
+   */
+  var IGN = 'https://data.geopf.fr/wmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile' +
+            '&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}';
+
+  var BASEMAPS = {
+    osm: {
+      name: 'OpenStreetMap',
+      url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+      credit: '© OpenStreetMap', maxZoom: 19, invertible: true
+    },
+    ign: {
+      name: 'Plan IGN',
+      url: IGN + '&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&FORMAT=image/png',
+      credit: '© IGN — Géoplateforme', maxZoom: 19, invertible: true
+    },
+    photo: {
+      name: 'Photo aérienne',
+      url: IGN + '&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&FORMAT=image/jpeg',
+      // Inverser une photo aérienne en thème sombre donnerait un négatif.
+      credit: '© IGN — Géoplateforme', maxZoom: 19, invertible: false
+    }
+  };
+
+  var basemap = 'osm';
+  function setBasemap(key) { basemap = BASEMAPS[key] ? key : 'osm'; }
+  function basemapKeys() { return Object.keys(BASEMAPS); }
+  function basemapName(key) { return (BASEMAPS[key] || BASEMAPS.osm).name; }
+
   var TILE_SIZE = 256;
-  var MAX_ZOOM  = 17;
+  var MIN_ZOOM  = 3;
+  var FIT_ZOOM  = 17;         // zoom maximal au cadrage automatique
   var MAP_RATIO = 210 / 340;  // hauteur / largeur de la carte
   var MAP_PAD   = 0.12;       // le tracé ne doit pas toucher les bords
 
@@ -213,7 +249,7 @@
 
   /** Zoom le plus serré auquel le trajet tient encore dans W x H pixels. */
   function fitZoom(coords, W, H) {
-    for (var z = MAX_ZOOM; z > 2; z--) {
+    for (var z = FIT_ZOOM; z > MIN_ZOOM; z--) {
       var xs = coords.map(function (c) { return lonToWorld(c[1], z); });
       var ys = coords.map(function (c) { return latToWorld(c[0], z); });
       var dx = Math.max.apply(null, xs) - Math.min.apply(null, xs);
@@ -301,10 +337,177 @@
     '</svg>';
   }
 
+  /* ---------- vue de la carte : zoom + déplacement ---------- */
+
+  /** Coordonnées écran d'un point [lat, lon] dans la vue `v`. */
+  function projector(v) {
+    return function (c) {
+      return [lonToWorld(c[1], v.z) - v.originX, latToWorld(c[0], v.z) - v.originY];
+    };
+  }
+
+  /** Cadrage automatique sur le trajet. */
+  function fitView(v) {
+    v.z = fitZoom(v.data.coords, v.W, v.H);
+    var xs = v.data.coords.map(function (c) { return lonToWorld(c[1], v.z); });
+    var ys = v.data.coords.map(function (c) { return latToWorld(c[0], v.z); });
+    v.originX = (Math.min.apply(null, xs) + Math.max.apply(null, xs)) / 2 - v.W / 2;
+    v.originY = (Math.min.apply(null, ys) + Math.max.apply(null, ys)) / 2 - v.H / 2;
+    clampView(v);
+  }
+
+  /** Empêche de sortir de la carte par le haut ou par le bas. */
+  function clampView(v) {
+    var world = TILE_SIZE * Math.pow(2, v.z);
+    v.originY = Math.max(Math.min(v.originY, world - v.H), Math.min(0, world - v.H));
+  }
+
+  /** Zoome de `dz` crans en gardant fixe le point écran (px, py). */
+  function zoomBy(v, dz, px, py) {
+    var max = (BASEMAPS[basemap] || BASEMAPS.osm).maxZoom;
+    var z = Math.max(MIN_ZOOM, Math.min(max, v.z + dz));
+    if (z === v.z) return false;
+
+    var k = Math.pow(2, z - v.z);
+    v.originX = (v.originX + px) * k - px;
+    v.originY = (v.originY + py) * k - py;
+    v.z = z;
+    clampView(v);
+    return true;
+  }
+
   /**
-   * Pose les tuiles et le tracé dans un conteneur déjà inséré dans le DOM :
-   * la largeur réelle n'est connue qu'à ce moment-là, et c'est elle qui décide
-   * du zoom et du nombre de tuiles.
+   * Pose les tuiles visibles. Les images déjà chargées sont **déplacées**, pas
+   * recréées : sans ça, chaque pixel de déplacement reconstruirait le DOM et la
+   * carte clignoterait. Une tuile de marge évite les bords blancs en glissant.
+   */
+  function layoutTiles(el, v) {
+    var conf = BASEMAPS[basemap] || BASEMAPS.osm;
+    var n = Math.pow(2, v.z);
+    var need = {};
+
+    for (var tx = Math.floor(v.originX / TILE_SIZE) - 1; tx <= Math.floor((v.originX + v.W) / TILE_SIZE) + 1; tx++) {
+      for (var ty = Math.floor(v.originY / TILE_SIZE) - 1; ty <= Math.floor((v.originY + v.H) / TILE_SIZE) + 1; ty++) {
+        if (ty < 0 || ty >= n) continue;
+        var wx = ((tx % n) + n) % n;   // la longitude s'enroule, pas la latitude
+        need[v.z + '/' + wx + '/' + ty] = [tx, ty, wx];
+      }
+    }
+
+    Object.keys(need).forEach(function (key) {
+      var t = need[key], img = v.tiles[key];
+      if (!img) {
+        img = new w.Image();
+        img.className = 'tile';
+        img.alt = '';
+        img.decoding = 'async';
+        img.src = conf.url.replace('{z}', v.z).replace('{x}', t[2]).replace('{y}', t[1]);
+        img.addEventListener('error', function () { tileFailed(el, v); });
+        v.layer.appendChild(img);
+        v.tiles[key] = img;
+      }
+      img.style.left = (t[0] * TILE_SIZE - v.originX).toFixed(1) + 'px';
+      img.style.top  = (t[1] * TILE_SIZE - v.originY).toFixed(1) + 'px';
+    });
+
+    Object.keys(v.tiles).forEach(function (key) {
+      if (need[key]) return;
+      var img = v.tiles[key];
+      if (img.parentNode) img.parentNode.removeChild(img);
+      delete v.tiles[key];
+    });
+  }
+
+  /**
+   * Sans accès Internet (Home Assistant isolé, avion, etc.) aucune tuile ne
+   * charge : on bascule sur le fond neutre plutôt que sur un cadre blanc.
+   */
+  function tileFailed(el, v) {
+    if (++v.failed < 3) return;
+    el.classList.add('notiles');
+    var foot = el.parentNode && el.parentNode.querySelector('.mapfoot');
+    if (foot) foot.textContent = 'Fond de carte indisponible (pas d’accès Internet) · tracé réel';
+  }
+
+  /** Redessine tuiles et calque pour la vue courante. */
+  function applyView(el, v) {
+    v.px = projector(v);
+    v.coords = v.data.coords.map(v.px);
+    v.points = v.data.points.map(v.px);
+    layoutTiles(el, v);
+    var svg = el.querySelector('.maplayer');
+    if (svg) svg.outerHTML = layerFor(el);
+  }
+
+  /** Molette, pincement, glissement, double tap. */
+  function bindGestures(el, v) {
+    var pointers = {}, last = null, pinch = null;
+
+    var pos = function (e) {
+      var r = el.getBoundingClientRect();
+      return [e.clientX - r.left, e.clientY - r.top];
+    };
+    var ids = function () { return Object.keys(pointers); };
+    var touched = function () { el.classList.add('moved'); applyView(el, v); };
+
+    el.addEventListener('pointerdown', function (e) {
+      pointers[e.pointerId] = pos(e);
+      el.setPointerCapture(e.pointerId);
+      if (ids().length === 2) {
+        var a = pointers[ids()[0]], b = pointers[ids()[1]];
+        pinch = Math.hypot(a[0] - b[0], a[1] - b[1]);
+      }
+      last = pos(e);
+    });
+
+    el.addEventListener('pointermove', function (e) {
+      if (!pointers[e.pointerId]) return;
+      var p = pos(e);
+      pointers[e.pointerId] = p;
+
+      if (ids().length >= 2) {
+        var a = pointers[ids()[0]], b = pointers[ids()[1]];
+        var dist = Math.hypot(a[0] - b[0], a[1] - b[1]);
+        // Un cran de zoom par variation notable de l'écart entre les doigts.
+        if (pinch && Math.abs(Math.log(dist / pinch) / Math.LN2) > 0.4) {
+          zoomBy(v, dist > pinch ? 1 : -1, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2);
+          pinch = dist;
+          touched();
+        }
+        return;
+      }
+
+      if (!last) return;
+      v.originX -= p[0] - last[0];
+      v.originY -= p[1] - last[1];
+      last = p;
+      clampView(v);
+      touched();
+    });
+
+    var release = function (e) {
+      delete pointers[e.pointerId];
+      if (ids().length < 2) pinch = null;
+      if (ids().length === 0) last = null;
+    };
+    el.addEventListener('pointerup', release);
+    el.addEventListener('pointercancel', release);
+
+    el.addEventListener('dblclick', function (e) {
+      var p = pos(e);
+      if (zoomBy(v, 1, p[0], p[1])) touched();
+    });
+
+    el.addEventListener('wheel', function (e) {
+      e.preventDefault();
+      var p = pos(e);
+      if (zoomBy(v, e.deltaY < 0 ? 1 : -1, p[0], p[1])) touched();
+    }, { passive: false });
+  }
+
+  /**
+   * Pose la carte dans un conteneur déjà inséré dans le DOM : la largeur réelle
+   * n'est connue qu'à ce moment-là, et c'est elle qui décide du cadrage.
    */
   function mountMap(el) {
     var data = maps[el.getAttribute('data-map')];
@@ -312,56 +515,43 @@
 
     var W = Math.round(el.clientWidth);
     if (!W) return;                                  // encore replié dans un <details>
-    if (el.getAttribute('data-w') === String(W)) return;  // déjà monté à cette taille
+    if (el.getAttribute('data-w') === String(W) && el._vm) return;
     el.setAttribute('data-w', String(W));
 
     var H = Math.round(W * MAP_RATIO);
     el.style.height = H + 'px';
 
-    var z = fitZoom(data.coords, W, H);
-    var xs = data.coords.map(function (c) { return lonToWorld(c[1], z); });
-    var ys = data.coords.map(function (c) { return latToWorld(c[0], z); });
-    var originX = (Math.min.apply(null, xs) + Math.max.apply(null, xs)) / 2 - W / 2;
-    var originY = (Math.min.apply(null, ys) + Math.max.apply(null, ys)) / 2 - H / 2;
+    el.innerHTML = '<div class="tilelayer"></div><svg class="maplayer"></svg>' +
+      '<div class="mapctl">' +
+        '<button type="button" data-map-zoom="1" aria-label="Zoomer">+</button>' +
+        '<button type="button" data-map-zoom="-1" aria-label="Dézoomer">−</button>' +
+        '<button type="button" data-map-fit aria-label="Recadrer sur le trajet">⌖</button>' +
+      '</div>';
 
-    var px = function (c) { return [lonToWorld(c[1], z) - originX, latToWorld(c[0], z) - originY]; };
-    var n = Math.pow(2, z);
+    // `raw` coupe l'inversion du thème sombre pour les fonds photographiques.
+    el.classList.toggle('raw', !(BASEMAPS[basemap] || BASEMAPS.osm).invertible);
 
-    var tiles = '';
-    for (var tx = Math.floor(originX / TILE_SIZE); tx <= Math.floor((originX + W) / TILE_SIZE); tx++) {
-      for (var ty = Math.floor(originY / TILE_SIZE); ty <= Math.floor((originY + H) / TILE_SIZE); ty++) {
-        if (ty < 0 || ty >= n) continue;
-        var wx = ((tx % n) + n) % n;   // la longitude s'enroule, pas la latitude
-        tiles += '<img class="tile" alt="" decoding="async" ' +
-          'style="left:' + (tx * TILE_SIZE - originX).toFixed(1) + 'px;top:' + (ty * TILE_SIZE - originY).toFixed(1) + 'px" ' +
-          'src="' + TILE_URL.replace('{z}', z).replace('{x}', wx).replace('{y}', ty) + '">';
-      }
-    }
+    var v = { W: W, H: H, data: data, tiles: {}, failed: 0,
+              layer: el.querySelector('.tilelayer'), cells: data.cells };
+    el._vm = v;
+    fitView(v);
+    applyView(el, v);
 
-    // Les tuiles ne bougent plus ; seul le calque SVG est réécrit quand le
-    // curseur change d'heure, sinon chaque cran rechargerait la carte entière.
-    el._vm = {
-      W: W, H: H, z: z, px: px,
-      coords: data.coords.map(px),
-      points: data.points.map(px),
-      cells: data.cells,
-      tiles: tiles
-    };
-    el.innerHTML = tiles + layerFor(el);
-
-    // Sans accès Internet (Home Assistant isolé, avion, etc.) aucune tuile ne
-    // charge : on bascule sur le fond neutre plutôt que sur un cadre blanc.
-    var imgs = el.querySelectorAll('img.tile');
-    var failed = 0;
-    Array.prototype.forEach.call(imgs, function (img) {
-      img.addEventListener('error', function () {
-        if (++failed >= imgs.length) {
-          el.classList.add('notiles');
-          var foot = el.parentNode.querySelector('.mapfoot');
-          if (foot) foot.textContent = 'Fond de carte indisponible (pas d’accès Internet) · tracé réel';
+    el.querySelector('[data-map-fit]').addEventListener('click', function () {
+      el.classList.remove('moved');
+      fitView(v);
+      applyView(el, v);
+    });
+    Array.prototype.forEach.call(el.querySelectorAll('[data-map-zoom]'), function (b) {
+      b.addEventListener('click', function () {
+        if (zoomBy(v, +b.getAttribute('data-map-zoom'), v.W / 2, v.H / 2)) {
+          el.classList.add('moved');
+          applyView(el, v);
         }
       });
     });
+
+    bindGestures(el, v);
   }
 
   /**
@@ -462,8 +652,8 @@
     maps[id] = { coords: coords, points: pts, cells: cells };
     sliderPoints = pts;
 
-    var caption = (route.track_ll ? 'Tracé réel' : 'Points de passage') +
-      ' · fond de carte © OpenStreetMap';
+    var conf = BASEMAPS[basemap] || BASEMAPS.osm;
+    var caption = (route.track_ll ? 'Tracé réel' : 'Points de passage') + ' · ' + conf.credit;
 
     // Les nuages valent pour l'heure de passage, pas pour maintenant : c'est
     // toute la différence avec une image radar, et ça doit se lire.
@@ -600,6 +790,7 @@
     esc: esc, num: num, rainColor: rainColor, rainTier: rainTier, verdictOf: verdictOf,
     verdictCard: verdictCard, profileStrip: profileStrip, windCard: windCard,
     rainChart: rainChart, radarMap: radarMap, mountMaps: mountMaps, routeSummary: routeSummary,
-    setField: setField, setFrame: setFrame, setOverview: setOverview
+    setField: setField, setFrame: setFrame, setOverview: setOverview,
+    setBasemap: setBasemap, basemapKeys: basemapKeys, basemapName: basemapName
   };
 })(window, document);

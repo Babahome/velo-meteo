@@ -8,6 +8,12 @@
   var UI = w.VM_UI, MOCK = w.VM_MOCK;
   var esc = UI.esc, num = UI.num;
 
+  var BASEMAP_DESC = {
+    osm: 'Le fond mondial d’OpenStreetMap. Pistes cyclables bien rendues, disponible partout.',
+    ign: 'La carte de l’IGN, France uniquement. Chemins, sentiers et relief plus détaillés.',
+    photo: 'Vue aérienne de l’IGN, France uniquement. Utile pour repérer un passage à vue.'
+  };
+
   var LAYOUTS = {
     A: { name: 'A · Verdict d’abord', desc: 'Verdict → profil de pluie → vent → carte → graphe. Les chiffres avant l’image.' },
     B: { name: 'B · Carte d’abord', desc: 'Carte → graphe de pluie par point de passage → verdict → profil → vent. Le plus visuel.' },
@@ -47,8 +53,11 @@
     // étant remis à zéro à chaque réécriture du formulaire.
     gpx: { direction: 'morning', speed: '18', file: null, busy: false, msg: null },
     field: { available: false, cells: [] },
-    demoRain: localStorage.getItem('vm.demo-rain') === '1'
+    demoRain: localStorage.getItem('vm.demo-rain') === '1',
+    basemap: localStorage.getItem('vm.basemap') || 'osm'
   };
+
+  UI.setBasemap(state.basemap);
 
   function currentTrip() {
     if (state.trip) return state.trip;
@@ -349,6 +358,24 @@
     return '<span class="muted">Aucune trace importée.</span>';
   }
 
+  /** Carte « Fond de carte » de la page Réglages. */
+  function basemapCard() {
+    var opts = UI.basemapKeys().map(function (k) {
+      return '<button class="opt" data-basemap="' + k + '" aria-checked="' + (state.basemap === k) +
+        '" role="radio"><span class="mark"></span>' +
+        '<span><span class="t">' + esc(UI.basemapName(k)) + '</span>' +
+        '<span class="d">' + esc(BASEMAP_DESC[k] || '') + '</span></span></button>';
+    }).join('');
+
+    return '<section class="card">' +
+        '<div class="card-pad" style="padding-bottom:4px"><div class="card-title">Fond de carte</div></div>' +
+        '<div class="opt-list" role="radiogroup">' + opts + '</div>' +
+        '<div class="card-pad"><div class="note">Les fonds IGN viennent de la Géoplateforme, ' +
+        'sans clé d’API et sous Licence Ouverte Etalab. La carte se déplace au doigt et se zoome ' +
+        'au pincement, à la molette ou avec les boutons ; ⌖ la recadre sur le trajet.</div></div>' +
+      '</section>';
+  }
+
   /**
    * Carte « Nuages de pluie » de la page Réglages : état de la couche, et
    * interrupteur d'averse simulée. Sans lui, valider le rendu des nuages
@@ -377,9 +404,12 @@
           '</button>' +
         '</div>' +
         '<div class="card-pad"><div class="small muted">' + etat + '</div>' +
-        '<div class="note" style="margin-top:8px">Les nuages viennent d’Open-Meteo, sur une grille d’environ 2 km autour du trajet, ' +
-        'et valent pour <b>l’heure de passage</b> — pas pour maintenant comme le ferait une image radar. ' +
-        'RainViewer a été écarté : ses tuiles s’arrêtent au zoom 7 en accès libre, bien trop grossier à l’échelle d’un vélotaf.</div></div>' +
+        '<div class="note" style="margin-top:8px">Modèle <b>Météo-France AROME</b> (1,5 km) via Open-Meteo, sur une grille ' +
+        'd’environ 900 m autour du trajet. Les nuages valent pour <b>l’heure de passage</b>.</div>' +
+        '<div class="note" style="margin-top:8px">C’est une <b>prévision</b>, pas un radar : elle ne montre pas ce qui tombe ' +
+        'en ce moment. Un écart avec une image radar (weather.com, MétéoCiel…) est normal — l’une observe, l’autre anticipe. ' +
+        'RainViewer a par ailleurs été écarté : ses tuiles s’arrêtent au zoom 7 en accès libre, bien trop grossier à ' +
+        'l’échelle d’un vélotaf.</div></div>' +
       '</section>';
   }
 
@@ -483,12 +513,13 @@
           '<div class="opt-list" role="radiogroup">' + opts + '</div>' +
         '</section>' +
 
+        basemapCard() +
         radarCard() +
 
         '<section class="card">' +
           '<div class="card-pad">' +
             '<div class="card-title">État</div>' +
-            '<div class="small muted">Version 0.5.1 · ' +
+            '<div class="small muted">Version 0.6.0 · ' +
               (state.config.configured ? 'trajet réel configuré' : 'aucun trajet : données fictives') +
               (state.offline ? ' · API injoignable' : '') + '.</div>' +
           '</div>' +
@@ -557,6 +588,15 @@
   });
 
   view.addEventListener('click', function (e) {
+    var bm = e.target.closest('.opt[data-basemap]');
+    if (bm) {
+      state.basemap = bm.getAttribute('data-basemap');
+      localStorage.setItem('vm.basemap', state.basemap);
+      UI.setBasemap(state.basemap);
+      render(true);
+      return;
+    }
+
     var opt = e.target.closest('.opt[data-layout]');
     if (opt) {
       state.layout = opt.getAttribute('data-layout');

@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.6.0 — Carte interactive, fonds IGN, modèle AROME
+
+- **La carte se déplace et se zoome.** C'était bien une image fixe : les tuiles étaient
+  posées une fois pour cadrer le trajet, sans aucune interaction. Elle accepte maintenant
+  le glissement au doigt ou à la souris, le pincement, la molette, le double-clic, et
+  trois boutons (+, −, et ⌖ qui recadre sur le trajet, visible seulement après un
+  déplacement).
+  - Toujours **sans bibliothèque carto**. Leaflet ou MapLibre auraient imposé 45 à 200 ko
+    dans l'image Docker *et* la réécriture de tout le calque — tracé, nuages, curseur —
+    dans leur système de coordonnées. Le zoom et le déplacement tiennent en ~120 lignes
+    et réutilisent la projection déjà en place.
+  - Les tuiles déjà chargées sont **déplacées**, pas recréées : sans ça, chaque pixel de
+    déplacement reconstruirait le DOM et la carte clignoterait.
+- **Fonds de carte IGN** (Réglages → Fond de carte) : *Plan IGN* et *Photo aérienne*, en
+  plus d'OpenStreetMap. La Géoplateforme sert ses tuiles **sans clé d'API**, dans la même
+  grille Web Mercator que l'OSM — une URL à changer, rien d'autre. Licence Ouverte Etalab,
+  mention affichée sous la carte. Le Scan 25 (carte de rando) n'est pas en accès libre.
+  La photo aérienne n'est pas assombrie dans le thème sombre : l'inverser donnerait un
+  négatif.
+
+Corrections :
+
+- **Modèle de prévision** : Open-Meteo servait en réalité **ICON** (modèle allemand,
+  maille de 2 à 11 km), qui lisse les averses locales — d'où des écarts visibles avec les
+  sources françaises. L'app demande désormais `meteofrance_seamless`, soit **AROME**
+  (1,5 km) sur la France. Comme Météo-France ne publie pas de probabilité de
+  précipitation via Open-Meteo, celle-ci est prise sur le modèle global, qui sert aussi
+  de repli hors couverture. Les deux modèles arrivent dans la même requête.
+
+  Cela rapproche l'app des prévisions françaises, mais ne la fera jamais coïncider avec
+  une image radar : l'app **prévoit** l'heure de passage, un radar **observe** l'instant
+  présent. Le point est expliqué dans Réglages → Nuages de pluie.
+
 ## 0.5.1 — Le curseur ne montre plus que des instants
 
 Le cran 0 du curseur affichait la vue d'ensemble, qui superpose plusieurs heures sur une

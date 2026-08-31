@@ -172,16 +172,37 @@ svg.chart,svg.map{display:block;width:100%;height:auto}
 }
 .chip-toggle[aria-pressed=true]{background:var(--accent);color:#fff;border-color:transparent}
 
-/* Fond de carte : tuiles OSM posees en absolu, tracé en SVG par-dessus.
-   La hauteur est fixée en JS, une fois la largeur réelle connue. */
-.mapcanvas{position:relative;overflow:hidden;background:var(--surface-2);min-height:120px}
+/* Fond de carte : tuiles posees en absolu, tracé en SVG par-dessus.
+   La hauteur est fixée en JS, une fois la largeur réelle connue.
+   touch-action:none — un doigt sur la carte la déplace, il ne fait pas
+   défiler la page : c'est le comportement attendu d'une vraie carte. */
+.mapcanvas{
+  position:relative;overflow:hidden;background:var(--surface-2);min-height:120px;
+  touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none
+}
+.mapcanvas:active{cursor:grabbing}
+.mapcanvas .tilelayer{position:absolute;inset:0}
 .mapcanvas .tile{position:absolute;width:256px;height:256px;display:block;border:0}
 .mapcanvas.notiles .tile{display:none}
-.mapcanvas .maplayer{position:absolute;inset:0;width:100%;height:100%}
+.mapcanvas .maplayer{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+
+/* Commandes de la carte, en haut a droite. */
+.mapctl{position:absolute;top:8px;right:8px;display:flex;flex-direction:column;gap:6px}
+.mapctl button{
+  width:34px;height:34px;border-radius:9px;display:grid;place-items:center;
+  font-size:17px;font-weight:700;line-height:1;
+  background:color-mix(in srgb,var(--surface) 88%,transparent);
+  color:var(--text);border:1px solid var(--line);box-shadow:var(--shadow)
+}
+/* Le recadrage ne sert que si on a bougé. */
+.mapctl [data-map-fit]{display:none}
+.mapcanvas.moved .mapctl [data-map-fit]{display:grid}
+
 @media (prefers-color-scheme:dark){
-  /* Les tuiles OSM sont claires : sans ça, la carte éblouit dans le thème sombre.
-     Les nuages de pluie sont en SVG par-dessus, donc non concernés. */
-  .mapcanvas .tile{filter:invert(1) hue-rotate(180deg) brightness(.85) contrast(.9)}
+  /* Les tuiles de plan sont claires : sans ça, la carte éblouit dans le thème
+     sombre. Les photos aériennes sont exclues — les inverser donnerait un
+     négatif. Les nuages de pluie sont en SVG par-dessus, donc non concernés. */
+  .mapcanvas:not(.raw) .tile{filter:invert(1) hue-rotate(180deg) brightness(.85) contrast(.9)}
 }
 
 /* --- Boutons / accordeons ------------------------------------------ */

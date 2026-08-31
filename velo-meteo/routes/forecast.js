@@ -58,12 +58,56 @@ function dirLabel(deg) {
 
 /* ---------- appel Open-Meteo ---------- */
 
+/**
+ * Deux modèles demandés en une seule requête, pour deux raisons distinctes.
+ *
+ *  - `meteofrance_seamless` enchaîne AROME HD (1,5 km), AROME et ARPEGE : c'est
+ *    la meilleure résolution disponible sur la France, et la source dont partent
+ *    les prévisions françaises. Le défaut d'Open-Meteo (`best_match`) sert en
+ *    réalité ICON, le modèle allemand, dont la maille de 2 à 11 km lisse les
+ *    averses locales — d'où des écarts visibles avec les autres sources.
+ *  - `best_match` est gardé parce que Météo-France ne publie **pas** de
+ *    probabilité de précipitation via Open-Meteo : le champ revient vide. Il
+ *    sert aussi de repli hors couverture Météo-France.
+ *
+ * Avec plusieurs modèles, Open-Meteo suffixe les champs. `normalize()` refusionne
+ * le tout en champs simples, valeur Météo-France d'abord, pour que le reste du
+ * code ignore complètement cette mécanique.
+ */
+const MODELS = 'meteofrance_seamless,best_match';
+
+/** Série Météo-France, trou par trou complétée par le modèle de repli. */
+function mergeSeries(main, fallback) {
+  if (!main) return fallback || [];
+  if (!fallback) return main;
+  return main.map((v, i) => (v === null || v === undefined ? fallback[i] : v));
+}
+
+function normalize(loc) {
+  ['minutely_15', 'hourly'].forEach(name => {
+    const block = loc[name];
+    if (!block) return;
+
+    const out = { time: block.time };
+    Object.keys(block).forEach(key => {
+      if (key === 'time') return;
+      const m = key.match(/^(.+)_(meteofrance_seamless|best_match)$/);
+      if (!m) { out[key] = block[key]; return; }
+      if (out[m[1]]) return;   // déjà fusionné via l'autre modèle
+      out[m[1]] = mergeSeries(block[m[1] + '_meteofrance_seamless'], block[m[1] + '_best_match']);
+    });
+    loc[name] = out;
+  });
+  return loc;
+}
+
 async function fetchForecast(points) {
   const qs = new URLSearchParams({
     latitude: points.map(p => p.lat).join(','),
     longitude: points.map(p => p.lon).join(','),
     minutely_15: 'precipitation,wind_speed_10m,wind_direction_10m,wind_gusts_10m,apparent_temperature',
     hourly: 'precipitation_probability',
+    models: MODELS,
     timezone: 'auto',
     forecast_days: '2',
     wind_speed_unit: 'kmh'
@@ -77,7 +121,7 @@ async function fetchForecast(points) {
     const json = await res.json();
     const locs = Array.isArray(json) ? json : [json];
     if (locs.length !== points.length) throw new Error('Open-Meteo : ' + locs.length + ' lieux pour ' + points.length + ' points');
-    return locs;
+    return locs.map(normalize);
   } finally {
     clearTimeout(timer);
   }

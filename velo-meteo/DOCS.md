@@ -126,10 +126,26 @@ formulaire ; ce qui est saisi dans l'app prend le dessus et survit aux redémarr
 
 ### La carte
 
-Fond de tuiles **OpenStreetMap**, cadré automatiquement sur le trajet, avec le tracé réel
-par-dessus. Elle n'est ni déplaçable ni zoomable : c'est une vue du trajet, pas une carte
-à explorer. Dans le thème sombre les tuiles sont assombries — une carte OSM brute éblouit
-la nuit. Sans accès Internet, seul le tracé reste, sur fond neutre, et la légende le dit.
+Cadrée automatiquement sur le trajet au premier affichage, avec le tracé réel par-dessus.
+Elle se **déplace** au doigt (ou à la souris) et se **zoome** au pincement, à la molette,
+au double-clic ou avec les boutons `+` / `−`. Le bouton `⌖` la recadre sur le trajet ; il
+n'apparaît qu'une fois qu'on l'a bougée.
+
+Trois fonds au choix dans **Réglages → Fond de carte** :
+
+| Fond | Couverture | Pour quoi faire |
+|---|---|---|
+| **OpenStreetMap** | Monde | Pistes cyclables bien rendues, le défaut |
+| **Plan IGN** | France | Chemins, sentiers et relief plus détaillés |
+| **Photo aérienne** | France | Repérer un passage à vue |
+
+Les fonds IGN viennent de la **Géoplateforme**, sans clé d'API, sous Licence Ouverte
+Etalab ; la mention figure sous la carte. Dans le thème sombre les tuiles de plan sont
+assombries — une carte claire éblouit la nuit — mais pas la photo aérienne, qu'une
+inversion transformerait en négatif. Sans accès Internet, seul le tracé reste, sur fond
+neutre, et la légende le dit.
+
+> Pas de Leaflet ni de MapLibre : voir *Choix techniques*.
 
 ### Les nuages de pluie
 
@@ -140,6 +156,14 @@ point de passage le plus proche, et le résultat est dessiné en taches floues.
 C'est une **prévision**, pas une image radar, et c'est délibéré : un radar montre ce qui
 tombe maintenant, alors que le reste de l'écran (verdict, profil, créneaux) parle de
 l'heure de départ. Deux échelles de temps sur le même écran se lisent de travers.
+
+> **Pourquoi ça ne colle pas avec weather.com.** D'abord parce qu'une prévision et une
+> observation radar ne peuvent pas coïncider. Ensuite parce que le modèle compte : le
+> défaut d'Open-Meteo sert ICON (allemand, maille de 2 à 11 km), qui lisse les averses
+> locales. L'app demande donc explicitement `meteofrance_seamless`, soit **AROME** à
+> 1,5 km sur la France. La probabilité de précipitation, que Météo-France ne publie pas
+> via Open-Meteo, reste prise sur le modèle global — qui sert aussi de repli hors
+> couverture française.
 
 > RainViewer, envisagé au départ, plafonne ses tuiles au **zoom 7** en accès libre : une
 > case y dépasse le kilomètre, ce qui donne un aplat uniforme sur une carte cadrée à
@@ -234,8 +258,9 @@ velo-meteo/
 |---|---|---|
 | [Nominatim](https://nominatim.openstreetmap.org) | Géocodage des adresses | À l'enregistrement du trajet |
 | [OSRM](https://routing.openstreetmap.de) (profil vélo, FOSSGIS) | Itinéraire | À l'enregistrement du trajet |
-| [Open-Meteo](https://open-meteo.com) | Pluie, vent, ressenti | À l'affichage, cache 5 min |
-| [Tuiles OSM](https://tile.openstreetmap.org) | Fond de carte | À chaque affichage de la carte |
+| [Open-Meteo](https://open-meteo.com) | Pluie, vent, ressenti — modèle **Météo-France AROME** | À l'affichage, cache 5 min |
+| [Tuiles OSM](https://tile.openstreetmap.org) | Fond de carte (défaut) | À chaque affichage de la carte |
+| [Géoplateforme IGN](https://geoservices.ign.fr) | Fonds Plan IGN et photo aérienne | Idem, si le fond IGN est choisi |
 | [Open-Meteo](https://open-meteo.com) | Nuages de pluie (grille ~900 m) | À l'affichage de la carte, cache 5 min |
 
 Aucune clé d'API n'est nécessaire. Nominatim impose 1 requête/seconde et un User-Agent
@@ -248,7 +273,7 @@ l'enregistrement, jamais en boucle. Données © contributeurs OpenStreetMap.
 |---|---|---|
 | React + Vite | HTML/CSS/JS vanilla | Pas d'étape de build : image Docker construite en quelques secondes sur le Pi, et une modif de layout est visible après un simple redémarrage. Aligné sur `sudoku` et `kitchencore`. |
 | Recharts | Graphe SVG écrit à la main | ~60 lignes, aucune dépendance. |
-| MapLibre GL JS | Tuiles OSM posées à la main + calque SVG | La carte n'est ni déplaçable ni zoomable : elle cadre le trajet, point. ~70 lignes contre ~800 ko de bibliothèque dans l'image Docker. |
+| MapLibre GL JS / Leaflet | Tuiles posées à la main + calque SVG | Le déplacement et le zoom tiennent en ~120 lignes et réutilisent la projection déjà en place. Une bibliothèque aurait coûté 45 à 200 ko dans l'image Docker **et** la réécriture de tout le calque (tracé, nuages, curseur) dans son système de coordonnées. |
 | Tuiles radar RainViewer | Grille Open-Meteo dessinée en SVG | RainViewer plafonne au zoom 7 en accès libre : trop grossier pour un vélotaf. Et il montre « maintenant » là où le reste de l'app montre l'heure de départ. |
 | Une lib GPX | Lecture à l'expression régulière | Un GPX est un XML plat dont on n'exploite que `trkpt`, `ele` et `time`. Ajouter un parseur XML complet à une image qui ne contient qu'express pour quatre balises ne se justifie pas. |
 | SQLite (`better-sqlite3`) | JSON dans `/data` | Compilation native très lente sur armv7/aarch64 pour un volume de données minuscule. |
