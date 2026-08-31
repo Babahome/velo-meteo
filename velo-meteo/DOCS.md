@@ -198,10 +198,21 @@ l'heure de départ. Deux échelles de temps sur le même écran se lisent de tra
 > case y dépasse le kilomètre, ce qui donne un aplat uniforme sur une carte cadrée à
 > quelques kilomètres. D'où le choix d'Open-Meteo.
 
-**Réglages → Nuages de pluie → Simuler une averse** fait traverser la carte à une averse
-fictive. Elle emprunte exactement le même chemin que les vraies données, ce qui permet de
-juger le rendu sans attendre qu'il pleuve pour de bon au-dessus du trajet. Le verdict et
-les chiffres, eux, ne bougent pas.
+**Réglages → Nuages de pluie → Simuler une averse** fait traverser le secteur à une averse
+fictive, de la bruine à l'averse forte, sans attendre qu'il pleuve pour de bon au-dessus
+du trajet.
+
+Elle alimente **toutes les vues de pluie**, pas seulement la carte : graphe, profil,
+verdict et créneaux. Comparer un écran mouillé à des chiffres secs ne permettrait rien de
+valider. Les chiffres du graphe sont d'ailleurs lus dans la même grille que la carte, à la
+case la plus proche du point de passage : les deux affichent exactement la même valeur.
+
+Sa position dépend du **temps écoulé**, pas du rang du point de passage. Les boutons
+±10 min la déplacent donc pour de bon, et la page Créneaux se classe vraiment. Un bandeau
+en haut de chaque page rappelle qu'on regarde un jeu d'essai.
+
+Le **vent reste réel** : le jeu d'essai simule la pluie, lui inventer une rose des vents
+n'apporterait rien de vérifiable.
 
 ### Carte, curseur et graphe : un seul bloc
 
@@ -337,7 +348,7 @@ Toutes les routes renvoient `source: "live"` ou `"mock"`, et `error` quand un re
 | Route | Réponse |
 |---|---|
 | `GET /api/route?type=morning\|evening` | Trajet, points de passage, tracé projeté |
-| `GET /api/weather?type=…` | mm/h, cumul, % et ressenti par point ; pic, cumul total |
+| `GET /api/weather?type=…&demo=1` | mm/h, cumul, % et ressenti par point ; pic, cumul total. `demo=1` renvoie le jeu d'essai |
 | `GET /api/wind?type=…` | Force, rafales, secteur, orientation relative au trajet |
 | `GET /api/radar?type=…&demo=1` | Nuages de pluie : grille autour du trajet, `cells` en vue d'ensemble et `frames` (une image par point de passage) pour le curseur. `demo=1` renvoie une averse fictive |
 | `GET /api/stats/windows?type=…` | 9 créneaux de départ autour de l'horaire habituel |

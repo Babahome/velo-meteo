@@ -1,6 +1,6 @@
 name: "Velo Meteo"
 description: "Meteo pluie & vent sur le trajet velotaf (V1 maquette - donnees mockees)"
-version: "0.9.1"
+version: "0.10.0"
 slug: "velo_meteo"
 init: false
 startup: application

@@ -21,7 +21,7 @@
 const router   = require('express').Router();
 const store    = require('./store');
 const forecast = require('./forecast');
-const { TRIPS } = require('./mock-data');
+const { demoContext } = require('./demo');
 
 // GET /api/radar?type=morning|evening&demo=1
 router.get('/', async (req, res) => {
@@ -32,15 +32,10 @@ router.get('/', async (req, res) => {
   // Le mode démo doit marcher aussi sans trajet configuré : c'est justement
   // là qu'on regarde le rendu avant d'avoir renseigné quoi que ce soit.
   if (demo) {
-    const trip = store.getTrip();
-    const configured = store.isConfigured(trip);
-    const route = configured ? trip.routes[type] : TRIPS[type];
-    const hhmm = configured
-      ? (type === 'evening' ? trip.evening_time : trip.morning_time)
-      : TRIPS[type].departure;
+    const d = demoContext(type);
     // Le décalage vaut aussi pour l'averse simulée : sans ça, les horaires du
     // curseur mentiraient dès qu'on touche aux boutons ±10 min.
-    const field = forecast.demoField(route, hhmm, shift);
+    const field = forecast.demoField(d.route, d.hhmm, shift);
     return res.json(Object.assign({ available: true, source: 'demo', error: null }, field));
   }
 

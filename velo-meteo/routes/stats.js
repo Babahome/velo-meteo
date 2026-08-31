@@ -5,6 +5,7 @@ const router = require('express').Router();
 const { HISTORY, WINDOWS } = require('./mock-data');
 const store    = require('./store');
 const forecast = require('./forecast');
+const { demoContext } = require('./demo');
 
 // GET /api/stats/history - encore mocké : l'historique réel arrivera avec
 // l'enregistrement quotidien des trajets dans /data.
@@ -23,9 +24,18 @@ router.get('/history', (_req, res) => {
   });
 });
 
-// GET /api/stats/windows?type=morning|evening
+// GET /api/stats/windows?type=morning|evening&demo=1
 router.get('/windows', async (req, res) => {
   const type = req.query.type === 'evening' ? 'evening' : 'morning';
+
+  // Sur le jeu d'essai, l'averse traverse le secteur en une heure : les créneaux
+  // se classent donc vraiment, au lieu d'afficher une liste figée.
+  if (req.query.demo === '1') {
+    const d = demoContext(type);
+    const shift = forecast.cleanShift(req.query.shift);
+    const w = forecast.demoWindows(d.route, d.hhmm, shift, 15, 9);
+    return res.json({ source: 'demo', error: null, type, windows: w.windows, usual: w.usual });
+  }
 
   if (store.isConfigured(store.getTrip())) {
     try {

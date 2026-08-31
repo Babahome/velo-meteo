@@ -3,11 +3,22 @@
 const router = require('express').Router();
 const { weatherOf } = require('./mock-data');
 const forecast      = require('./forecast');
+const { demoContext } = require('./demo');
 
-// GET /api/weather?type=morning|evening
+// GET /api/weather?type=morning|evening&demo=1
 router.get('/', async (req, res) => {
   const type = req.query.type === 'evening' ? 'evening' : 'morning';
-  const { data, source, error } = await forecast.safeTripData(type, forecast.cleanShift(req.query.shift));
+  const shift = forecast.cleanShift(req.query.shift);
+
+  // L'averse simulée doit arroser le graphe, le profil et le verdict autant que
+  // la carte : comparer un écran mouillé à des chiffres secs ne validerait rien.
+  if (req.query.demo === '1') {
+    const d = demoContext(type);
+    return res.json(Object.assign({ source: 'demo', error: null },
+      forecast.demoWeather(d.route, d.hhmm, shift, type)));
+  }
+
+  const { data, source, error } = await forecast.safeTripData(type, shift);
   const body = data ? data.weather : weatherOf(type);
   res.json(Object.assign({ source, error }, body));
 });

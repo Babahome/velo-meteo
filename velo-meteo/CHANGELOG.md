@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.10.0 — L'averse simulée arrose tout l'écran
+
+L'averse de test ne colorait que la carte : le graphe, le profil et le verdict continuaient
+d'afficher la vraie prévision. Comparer un écran mouillé à des chiffres secs ne permettait
+de rien valider. Le jeu d'essai alimente maintenant **toutes** les vues de pluie.
+
+- **Graphe, profil de pluie et verdict** suivent l'averse simulée, avec des probabilités
+  cohérentes avec l'intensité.
+- **Les chiffres du graphe et ceux de la carte sont les mêmes** : l'intensité d'un point de
+  passage est lue dans la grille, à la case la plus proche — exactement ce que fait la
+  pastille du curseur. Vérifié point par point.
+- **La position de l'averse dépend maintenant du temps écoulé**, plus du rang du point de
+  passage. Conséquence : les boutons ±10 min la déplacent pour de bon (−30 min et +60 min
+  donnent un trajet sec, l'horaire habituel prend 1,7 mm), et **la page Créneaux se classe
+  vraiment** au lieu d'afficher une liste figée.
+- Un bandeau « ☔ Averse simulée · tout l'écran tourne sur le jeu d'essai » remplace celui
+  d'origine des données : impossible de confondre un test avec une vraie prévision.
+
+Le vent reste réel : le jeu d'essai simule la pluie, inventer une rose des vents avec
+n'aurait rien apporté de vérifiable.
+
 ## 0.9.1 — Le graphe dit ses chiffres, la carte gagne ses coins
 
 - **L'intensité est écrite au-dessus de chaque barre** du graphe. Une barre courte ne

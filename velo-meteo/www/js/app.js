@@ -111,16 +111,19 @@
   /** Suffixe de décalage, ajouté à toute requête qui dépend de l'heure de départ. */
   function sh() { return state.shift ? '&shift=' + state.shift : ''; }
 
+  /** L'averse simulée vaut pour tout l'écran, pas seulement pour la carte. */
+  function dm() { return state.demoRain ? '&demo=1' : ''; }
+
   var api = {
     route: function (t) { return get('/api/route?type=' + t + sh(), function () { return MOCK.route(t); }); },
-    weather: function (t) { return get('/api/weather?type=' + t + sh(), function () { return MOCK.weather(t); }); },
+    weather: function (t) { return get('/api/weather?type=' + t + sh() + dm(), function () { return MOCK.weather(t); }); },
     wind: function (t) { return get('/api/wind?type=' + t + sh(), function () { return MOCK.wind(t); }); },
-    windows: function (t) { return get('/api/stats/windows?type=' + t, function () { return MOCK.windows(t); }); },
+    windows: function (t) { return get('/api/stats/windows?type=' + t + sh() + dm(), function () { return MOCK.windows(t); }); },
     history: function () { return get('/api/stats/history', function () { return MOCK.history(); }); },
     options: function () { return get('/api/options', function () { return MOCK.options; }); },
     trip: function () { return get('/api/trip', function () { return MOCK.trip; }); },
     field: function (t) {
-      return get('/api/radar?type=' + t + sh() + (state.demoRain ? '&demo=1' : ''),
+      return get('/api/radar?type=' + t + sh() + dm(),
                  function () { return { available: false, cells: [] }; });
     }
   };
@@ -151,6 +154,9 @@
     if (state.error) {
       return '<div class="mockbar warn-bar">⚠️ Prévisions indisponibles · repli sur la maquette<br>' +
         '<span style="text-transform:none;letter-spacing:0;font-weight:500">' + esc(state.error) + '</span></div>';
+    }
+    if (state.source === 'demo') {
+      return '<div class="mockbar warn-bar">☔ Averse simulée · tout l’écran tourne sur le jeu d’essai</div>';
     }
     if (state.source === 'live') {
       return '<div class="livebar">✅ Données réelles · Open-Meteo' +
@@ -586,7 +592,7 @@
         '<section class="card">' +
           '<div class="card-pad">' +
             '<div class="card-title">État</div>' +
-            '<div class="small muted">Version 0.9.1 · ' +
+            '<div class="small muted">Version 0.10.0 · ' +
               (state.config.configured ? 'trajet réel configuré' : 'aucun trajet : données fictives') +
               (state.offline ? ' · API injoignable' : '') + '.</div>' +
           '</div>' +

@@ -420,60 +420,161 @@ async function computeField(route, hhmm, shift) {
   };
 }
 
-/**
- * Averse fictive, pour juger le rendu sans attendre qu'il pleuve vraiment
- * au-dessus du trajet — ce qui n'arrive jamais au moment où on développe.
+/* ---------- averse simulée ---------- */
+
+/*
+ * Jeu d'essai complet, et pas seulement pour la carte : le graphe, le profil,
+ * le verdict et les créneaux en dépendent aussi, sinon on compare un écran
+ * arrosé à des chiffres secs et on ne peut rien valider.
  *
- * Elle **traverse** la carte au fil des images : un nuage immobile ne dirait
- * pas si le curseur fait vraiment changer l'heure.
+ * L'averse **traverse** le secteur en une heure. Sa position ne dépend donc pas
+ * du rang du point de passage mais du **temps écoulé** : décaler le départ de
+ * ±10 minutes la déplace pour de bon, et les créneaux se classent vraiment.
  */
-function demoField(route, hhmm, shift) {
+
+const DEMO_CROSS_MIN = 60;   // durée de la traversée
+const DEMO_PEAK = 14;        // mm/h au cœur, de quoi atteindre le dernier palier
+
+/** Géométrie commune à toutes les vues de l'averse simulée. */
+function demoGeom(route) {
   const grid = buildGrid(route.points, GRID_STEP_M, GRID_MAX_SIDE);
   const pts = route.points;
-  const mid = pts[Math.floor(pts.length / 2)];
-  const spread = Math.max(grid.stepLat, grid.stepLon) * 1.1;
+  return {
+    grid: grid,
+    pts: pts,
+    mid: pts[Math.floor(pts.length / 2)],
+    spread: Math.max(grid.stepLat, grid.stepLon) * 1.1,
+    // Le jeu fictif n'a pas d'`offset_min` : on le reconstitue au prorata.
+    offsetOf: (p, k) => (typeof p.offset_min === 'number' ? p.offset_min
+      : Math.round(((route.duration_min || 30) * k) / Math.max(1, pts.length - 1)))
+  };
+}
 
-  // Deux heures fictives suffisent : le curseur lit `frames`, pas l'horloge.
+/** Intensité fictive en un point, `tMin` minutes après le départ habituel. */
+function demoRateAt(g, lat, lon, tMin) {
+  const u = tMin / DEMO_CROSS_MIN - 0.5;
+  const cLat = g.mid.lat + g.spread * 3 * u;
+  const cLon = g.mid.lon + g.spread * 3 * u;
+  const d1 = Math.hypot(lat - cLat, lon - cLon) / g.spread;
+  const d2 = Math.hypot(lat - (cLat + g.spread * 1.6), lon - (cLon - g.spread * 1.6)) / g.spread;
+  return +(DEMO_PEAK * Math.exp(-d1 * d1) + 2 * Math.exp(-d2 * d2)).toFixed(2);
+}
+
+/** Minutes du départ, décalage compris, à partir de "HH:MM". */
+function minutesOf(hhmm, shift) {
   const parts = String(hhmm || '08:00').split(':');
-  const dep = (parseInt(parts[0], 10) || 0) * 60 + (parseInt(parts[1], 10) || 0) + (shift || 0);
+  return (parseInt(parts[0], 10) || 0) * 60 + (parseInt(parts[1], 10) || 0) + (shift || 0);
+}
 
-  // Le jeu de données fictif n'a pas d'`offset_min` : on le reconstitue à
-  // partir du rang du point et de la durée du trajet.
-  const offsetOf = (p, k) => (typeof p.offset_min === 'number' ? p.offset_min
-    : Math.round(((route.duration_min || 30) * k) / Math.max(1, pts.length - 1)));
+const hhmmOf = m => pad(Math.floor(((m % 1440) + 1440) % 1440 / 60)) + ':' + pad(((m % 60) + 60) % 60);
 
-  const frames = pts.map((p, k) => {
-    // L'averse arrive du sud-ouest et sort par le nord-est le long du trajet.
-    const t = pts.length > 1 ? k / (pts.length - 1) - 0.5 : 0;
-    const cLat = mid.lat + spread * 3 * t;
-    const cLon = mid.lon + spread * 3 * t;
-    const m = dep + offsetOf(p, k);
+/**
+ * Intensité lue **dans la grille**, à la case la plus proche du point. Le
+ * graphe et la pastille du curseur doivent afficher le même chiffre que la
+ * tache dessinée sous le marqueur, pas une valeur calculée à côté.
+ */
+function demoRateOnRoute(g, p, tMin) {
+  let best = null, bestD = Infinity;
+  g.grid.cells.forEach(c => {
+    const dd = (c.lat - p.lat) ** 2 + (c.lon - p.lon) ** 2;
+    if (dd < bestD) { bestD = dd; best = c; }
+  });
+  return demoRateAt(g, best.lat, best.lon, tMin);
+}
 
+function demoField(route, hhmm, shift) {
+  const g = demoGeom(route);
+  const dep = minutesOf(hhmm, shift);
+
+  const frames = g.pts.map((p, k) => {
+    const t = g.offsetOf(p, k) + (shift || 0);
     return {
       i: p.i,
-      offset_min: offsetOf(p, k),
-      // L'horaire du jeu fictif est repris tel quel, sauf si un décalage est
-      // demandé : il faut alors le recalculer pour qu'il suive les boutons.
-      time: (!shift && p.time) || (String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0')),
+      offset_min: g.offsetOf(p, k),
+      time: hhmmOf(dep + g.offsetOf(p, k)),
       found: true,
-      rates: grid.cells.map(c => {
-        const d1 = Math.hypot(c.lat - cLat, c.lon - cLon) / spread;
-        const d2 = Math.hypot(c.lat - (cLat + spread * 1.6), c.lon - (cLon - spread * 1.6)) / spread;
-        // Le noyau monte à 14 mm/h et la traîne descend sous 1 : l'averse
-        // simulée traverse ainsi les quatre paliers de l'échelle, ce qu'il faut
-        // pour juger la lisibilité du dégradé.
-        return +(14 * Math.exp(-d1 * d1) + 2 * Math.exp(-d2 * d2)).toFixed(2);
-      })
+      rates: g.grid.cells.map(c => demoRateAt(g, c.lat, c.lon, t))
     };
   });
 
   return {
-    cells: overview(grid, pts, frames),
+    cells: overview(g.grid, g.pts, frames),
     frames: frames,
-    step_lat: +grid.stepLat.toFixed(5),
-    step_lon: +grid.stepLon.toFixed(5),
+    step_lat: +g.grid.stepLat.toFixed(5),
+    step_lon: +g.grid.stepLon.toFixed(5),
     at: null
   };
+}
+
+/** Le même jeu d'essai, mis en forme comme une vraie réponse météo. */
+function demoWeather(route, hhmm, shift, type) {
+  const g = demoGeom(route);
+  const dep = minutesOf(hhmm, shift);
+
+  const points = g.pts.map((p, k) => {
+    const off = g.offsetOf(p, k);
+    const rate = demoRateOnRoute(g, p, off + (shift || 0));
+    return {
+      i: p.i,
+      time: hhmmOf(dep + off),
+      label: p.label,
+      rate: rate,
+      // Probabilité et ressenti sont fictifs eux aussi, mais cohérents avec la
+      // pluie : un verdict calculé sur un ciel sec n'aurait aucun sens ici.
+      prob: Math.min(95, Math.round(rate * 9 + (rate > 0.1 ? 25 : 5))),
+      temp: 13
+    };
+  });
+
+  const sliceH = ((route.duration_min || 30) / Math.max(1, points.length - 1)) / 60;
+  points.forEach(p => { p.mm = +(p.rate * sliceH).toFixed(2); });
+
+  const peak = points.reduce((a, b) => (b.rate > a.rate ? b : a), points[0]);
+  return {
+    type: type,
+    points: points,
+    total_mm: +points.reduce((s, p) => s + p.mm, 0).toFixed(1),
+    max_rate: +Math.max.apply(null, points.map(p => p.rate)).toFixed(2),
+    max_prob: Math.max.apply(null, points.map(p => p.prob)),
+    peak: { time: peak.time, label: peak.label, rate: peak.rate, mm: peak.mm, prob: peak.prob },
+    temp_c: 13,
+    for_date: null
+  };
+}
+
+/** Créneaux de départ sur le même jeu d'essai : l'averse s'éloigne vraiment. */
+function demoWindows(route, hhmm, shift, stepMin, count) {
+  const g = demoGeom(route);
+  const step = stepMin || 15;
+  const n = count || 9;
+  const half = Math.floor(n / 2);
+  const dep = minutesOf(hhmm, shift);
+  const sliceH = ((route.duration_min || 30) / Math.max(1, g.pts.length - 1)) / 60;
+
+  const windows = [];
+  for (let k = -half; k < n - half; k++) {
+    const delta = k * step;
+    let mm = 0, probMax = 0;
+
+    g.pts.forEach((p, i) => {
+      const rate = demoRateOnRoute(g, p, g.offsetOf(p, i) + (shift || 0) + delta);
+      mm += rate * sliceH;
+      probMax = Math.max(probMax, Math.min(95, Math.round(rate * 9 + (rate > 0.1 ? 25 : 5))));
+    });
+
+    mm = +mm.toFixed(2);
+    windows.push({
+      time: hhmmOf(dep + delta),
+      mm: mm,
+      prob_max: probMax,
+      wind_kmh: 14,
+      score: Math.max(0, Math.round(100 - mm * 22 - probMax * 0.45 - Math.abs(delta) * 0.22)),
+      verdict: mm >= 0.5 && probMax > 50 ? 'pluie' : probMax > 30 || mm > 0.1 ? 'risque' : 'sec',
+      is_usual: k === 0
+    });
+  }
+
+  return { type: 'demo', windows: windows, usual: hhmmOf(dep) };
 }
 
 /**
@@ -508,5 +609,5 @@ async function getField(type, shift) {
 
 module.exports = {
   getTripData, getWindows, safeTripData, invalidate, nextDeparture, cleanShift,
-  getField, demoField
+  getField, demoField, demoWeather, demoWindows
 };
