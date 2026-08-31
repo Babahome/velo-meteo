@@ -163,10 +163,15 @@ manipulation et l'écosystème de contrôles, pas la netteté.
 
 ### Le pas de temps
 
-**Réglages → Pas de temps** : `Automatique`, 5, 10, 15 ou 30 minutes. Il décide du nombre
+**Réglages → Pas de temps** : 5 (défaut), 10, 15, 30 minutes ou `Automatique`. Il décide du nombre
 de points de passage, donc du nombre de crans du curseur et de colonnes du graphe. Sur un
 trajet de 55 minutes : 3 points à 30 min, 5 à 15, 7 à 10, 12 à 5 — et 8 en automatique,
-le comportement d'origine.
+l'ancien défaut.
+
+Les boutons `−10` et `+10` ne provoquent **pas** de rendu complet : seuls le verdict, le
+profil, le vent, le résumé, le bandeau, le curseur, le graphe et la couche de pluie sont
+réécrits. La carte et ses tuiles restent en place — le tracé ne bouge pas quand on décale
+l'heure — et le curseur garde le point qu'on regardait.
 
 Le changement **rééchantillonne le tracé déjà mémorisé** : ni géocodage ni calcul
 d'itinéraire, c'est instantané et ça n'use aucun quota. Les noms de rue survivent au

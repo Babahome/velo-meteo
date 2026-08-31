@@ -152,6 +152,12 @@
     // Colonne du point choisi au curseur : le graphe doit dire la même chose que
     // la carte, sinon les deux se lisent séparément au lieu de se répondre.
     var active = overviewOn ? -1 : frame;
+
+    // Un pas de temps fin peut monter à 16 colonnes : les étiquettes ne tiennent
+    // plus toutes. On les espace, en gardant toujours celle du point choisi.
+    var valueEvery = pts.length > 12 ? 2 : 1;
+    var timeEvery  = Math.max(1, Math.ceil(pts.length / 6));
+    var valueSize  = pts.length > 10 ? 9 : 10;
     [0, 0.5, 1].forEach(function (f) {
       var y = T + ph - f * ph;
       grid += '<line x1="' + L + '" y1="' + y.toFixed(1) + '" x2="' + (W - R) + '" y2="' + y.toFixed(1) +
@@ -179,9 +185,9 @@
 
       // L'intensité écrite au-dessus de la barre : sans elle, une barre courte
       // ne dit pas si on parle de bruine ou d'averse.
-      if (p.rate >= 0.05) {
+      if (p.rate >= 0.05 && (on || i % valueEvery === 0)) {
         bars += '<text x="' + cx.toFixed(1) + '" y="' + (T + ph - h - 4).toFixed(1) +
-          '" text-anchor="middle" font-size="10" font-weight="700" fill="var(--text)">' +
+          '" text-anchor="middle" font-size="' + valueSize + '" font-weight="700" fill="var(--text)">' +
           num(p.rate) + '</text>';
       }
 
@@ -190,8 +196,8 @@
       dots += '<circle cx="' + cx.toFixed(1) + '" cy="' + py.toFixed(1) + '" r="' + (on ? 4.6 : 2.6) +
         '" fill="var(--accent)"' + (on ? ' stroke="var(--surface)" stroke-width="2"' : '') + '/>';
 
-      // L'heure du point choisi est toujours écrite, les autres une sur deux.
-      if (i % 2 === 0 || on) {
+      // L'heure du point choisi est toujours écrite, les autres espacées.
+      if (i % timeEvery === 0 || on) {
         xlab += '<text x="' + cx.toFixed(1) + '" y="' + (H - 10) + '" text-anchor="middle" font-size="9" ' +
           'font-weight="' + (on ? '700' : '400') + '" fill="var(--' + (on ? 'text' : 'text-dim') + ')">' +
           p.time + '</text>';
@@ -207,9 +213,11 @@
       }
     });
 
-    return band + grid + bars +
+    // La poignée passe **sous** les barres et leurs valeurs : posée par-dessus,
+    // son trait vertical barrait le chiffre de la colonne choisie.
+    return band + hits + grid + bars +
       '<path d="' + line.trim() + '" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
-      dots + xlab + hits;
+      dots + xlab;
   }
 
   function rainChart(weather, standalone) {
@@ -950,6 +958,10 @@
     Array.prototype.forEach.call(root.querySelectorAll('[data-overview]'), function (b) {
       b.setAttribute('aria-pressed', String(overviewOn));
     });
+
+    Array.prototype.forEach.call(root.querySelectorAll('[data-shift-chip]'), function (box) {
+      box.innerHTML = shiftChip();
+    });
   }
 
   /** Redessine le calque de chaque carte affichée, sans retoucher aux tuiles. */
@@ -1115,7 +1127,7 @@
           'title="Partir 10 minutes plus tard" aria-label="Partir 10 minutes plus tard">+</button>' +
       '</div>' +
       '<div class="slider-lbl" data-slider-label>' + sliderLabel(route) + '</div>' +
-      shiftChip() +
+      '<div data-shift-chip>' + shiftChip() + '</div>' +
     '</div>';
   }
 
@@ -1238,6 +1250,6 @@
     setBasemap: setBasemap, basemapKeys: basemapKeys, basemapName: basemapName,
     setEngine: setEngine, engineKeys: engineKeys,
     setShift: setShift, setMarkers: setMarkers, markerSets: markerSets,
-    setShown: setShown, rainChartCard: rainChartCard
+    setShown: setShown, rainChartCard: rainChartCard, syncSelection: syncSelection
   };
 })(window, document);

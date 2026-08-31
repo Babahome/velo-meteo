@@ -131,13 +131,16 @@
   };
 
   /** Recharge les nuages de pluie : ils suivent le trajet affiché et l'heure. */
-  function refreshField() {
+  function refreshField(keepFrame) {
     return api.field(currentTrip()).then(function (f) {
       state.field = f || { available: false, cells: [] };
       UI.setField(state.field);
-      // Les images ont changé : le curseur repart au départ du trajet.
-      UI.setFrame(0);
-      UI.setOverview(false);
+      // Un décalage garde le point regardé : seules les heures ont bougé, pas
+      // les points de passage. Un changement de trajet, lui, repart du départ.
+      if (!keepFrame) {
+        UI.setFrame(0);
+        UI.setOverview(false);
+      }
       return state.field;
     });
   }
@@ -200,6 +203,30 @@
 
   /* ---------- page : Aujourd'hui ---------- */
 
+  /**
+   * Chaque bloc qui dépend de l'heure de départ est adressable, pour pouvoir
+   * être réécrit seul lors d'un décalage. `display:contents` rend l'enveloppe
+   * transparente : elle ne change rien à la mise en page.
+   */
+  function block(name, html) {
+    return '<div data-block="' + name + '" style="display:contents">' + html + '</div>';
+  }
+
+  /** Les blocs liés au temps, dans l'ordre attendu par chaque layout. */
+  function homeBlocks(route, weather, wind) {
+    var seuil = state.options ? state.options.rain_alert_threshold_mm : 0.5;
+    var v = UI.verdictOf(weather, seuil);
+    var compact = state.layout === 'B';
+
+    return {
+      source: sourceBar(weather.for_date),
+      verdict: UI.verdictCard(weather, v, compact),
+      profile: UI.profileStrip(route, weather),
+      wind: UI.windCard(wind),
+      summary: UI.routeSummary(route)
+    };
+  }
+
   function pageHome() {
     var t = currentTrip();
     setSwitch(true);
@@ -207,10 +234,9 @@
       var route = res[0], weather = noteSource(res[1]), wind = res[2];
       shownRoute = route;
       UI.setShown(route, weather);
-      var seuil = state.options ? state.options.rain_alert_threshold_mm : 0.5;
-      var v = UI.verdictOf(weather, seuil);
 
-      var head = sourceBar(weather.for_date) + (state.config.configured ? '' : setupCta());
+      var b = homeBlocks(route, weather, wind);
+      var head = block('source', b.source) + (state.config.configured ? '' : setupCta());
 
       var cta =
         '<a class="btn" href="#/creneaux">⏱️ Voir le meilleur créneau</a>' +
@@ -221,18 +247,18 @@
       if (state.layout === 'B') {
         return head +
           UI.radarMap(route, weather) +
-          UI.verdictCard(weather, v, true) +
-          UI.profileStrip(route, weather) +
-          UI.windCard(wind) +
-          UI.routeSummary(route) +
+          block('verdict', b.verdict) +
+          block('profile', b.profile) +
+          block('wind', b.wind) +
+          block('summary', b.summary) +
           cta;
       }
 
       if (state.layout === 'C') {
         return head +
-          UI.verdictCard(weather, v, false) +
-          UI.profileStrip(route, weather) +
-          UI.windCard(wind) +
+          block('verdict', b.verdict) +
+          block('profile', b.profile) +
+          block('wind', b.wind) +
           '<details class="acc"><summary>Carte et pluie du trajet</summary>' +
             '<div class="acc-body">' + UI.radarMap(route, weather) + '</div></details>' +
           cta;
@@ -241,13 +267,42 @@
       // Même en A, la carte passe avant le graphe : elle donne le contexte que
       // le graphe suppose connu, et les deux ne font plus qu'un bloc.
       return head +
-        UI.verdictCard(weather, v, false) +
-        UI.profileStrip(route, weather) +
-        UI.windCard(wind) +
+        block('verdict', b.verdict) +
+        block('profile', b.profile) +
+        block('wind', b.wind) +
         UI.radarMap(route, weather) +
-        UI.routeSummary(route) +
+        block('summary', b.summary) +
         cta;
     });
+  }
+
+  /**
+   * Rafraîchit **uniquement** ce qui dépend de l'heure de départ : verdict,
+   * profil, vent, résumé, bandeau, plus le curseur, le graphe et la couche de
+   * pluie de la carte.
+   *
+   * Un rendu complet remonterait la carte, donc rechargerait ses tuiles : tout
+   * l'écran clignotait à chaque appui sur ±10 min, alors que le tracé, lui, ne
+   * bouge pas d'un pixel.
+   */
+  function refreshTime() {
+    var t = currentTrip();
+    return Promise.all([api.route(t), api.weather(t), api.wind(t), refreshField(true)])
+      .then(function (res) {
+        var route = res[0], weather = noteSource(res[1]), wind = res[2];
+        shownRoute = route;
+        UI.setShown(route, weather);
+
+        var b = homeBlocks(route, weather, wind);
+        Object.keys(b).forEach(function (name) {
+          var el = view.querySelector('[data-block="' + name + '"]');
+          if (el) el.innerHTML = b[name];
+        });
+
+        // Curseur, graphe et calque de pluie ; les tuiles ne sont pas touchées.
+        UI.syncSelection(view);
+      })
+      .catch(function () { render(true); });   // en dernier recours, rendu complet
   }
 
   /* ---------- page : Créneaux ---------- */
@@ -395,11 +450,11 @@
    * finesse **spatiale** (des endroits différents), pas temporelle.
    */
   var STEPS = [
-    { key: 'auto', label: 'Automatique', desc: '8 points de passage quel que soit le trajet. Le réglage d’origine, lisible sur un écran de téléphone.' },
-    { key: '5', label: '5 minutes', desc: 'Le plus fin. Open-Meteo ne descend pas sous 15 min : plusieurs points liront le même créneau, mais à des endroits différents.' },
+    { key: '5', label: '5 minutes', desc: 'Le défaut, et le plus fin. Open-Meteo ne descend pas sous 15 min : plusieurs points liront le même créneau, mais à des endroits différents, donc sur des intensités différentes.' },
     { key: '10', label: '10 minutes', desc: 'Bon compromis sur un trajet d’une heure.' },
     { key: '15', label: '15 minutes', desc: 'Cale exactement sur le pas d’Open-Meteo : un point, un créneau.' },
-    { key: '30', label: '30 minutes', desc: 'Vue d’ensemble, peu de points. Utile sur les longs trajets.' }
+    { key: '30', label: '30 minutes', desc: 'Vue d’ensemble, peu de points. Utile sur les longs trajets.' },
+    { key: 'auto', label: 'Automatique', desc: '8 points quelle que soit la durée. L’ancien défaut, un compromis qui tient sur tous les trajets.' }
   ];
 
   /** Carte « Pas de temps » de la page Réglages. */
@@ -407,7 +462,7 @@
     var t = state.config.trip;
     if (!t) return '';
 
-    var cur = String(t.step_min || 'auto');
+    var cur = String(t.step_min || '5');
     var opts = STEPS.map(function (o) {
       return '<button class="opt" data-step="' + o.key + '" aria-checked="' + (cur === o.key) +
         '" role="radio"' + (state.stepping ? ' disabled' : '') + '><span class="mark"></span>' +
@@ -636,7 +691,7 @@
         '<section class="card">' +
           '<div class="card-pad">' +
             '<div class="card-title">État</div>' +
-            '<div class="small muted">Version 0.12.0 · ' +
+            '<div class="small muted">Version 0.13.0 · ' +
               (state.config.configured ? 'trajet réel configuré' : 'aucun trajet : données fictives') +
               (state.offline ? ' · API injoignable' : '') + '.</div>' +
           '</div>' +
@@ -777,11 +832,19 @@
     UI.setShift(state.shift);
 
     if (shiftTimer) clearTimeout(shiftTimer);
-    shiftTimer = setTimeout(function () { shiftTimer = null; render(true); }, 320);
+    shiftTimer = setTimeout(function () {
+      shiftTimer = null;
+      var wrap = view.querySelector('.mapwrap');
+      if (wrap) wrap.classList.add('pending');
+      refreshTime().then(function () {
+        var w = view.querySelector('.mapwrap');
+        if (w) w.classList.remove('pending');
+      });
+    }, 320);
 
-    // Retour immédiat sur le bouton, sans attendre le réseau.
-    var chip = view.querySelector('.slider-actions');
-    if (chip) chip.classList.toggle('pending', true);
+    // Retour immédiat sur le rappel de décalage, sans attendre le réseau.
+    var box = view.querySelector('[data-shift-chip]');
+    if (box) box.parentNode.classList.add('pending');
   }
 
   /** Change le pas de temps : le serveur rééchantillonne le trajet mémorisé. */

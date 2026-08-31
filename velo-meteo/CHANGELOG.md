@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.13.0 — Le décalage ne recharge plus la page
+
+- **Un appui sur ±10 min ne re-rend plus que ce qui dépend de l'heure** : verdict, profil,
+  vent, résumé, bandeau, plus le curseur, le graphe et la couche de pluie de la carte.
+  - Le rendu complet d'avant remontait la carte, donc **rechargeait ses tuiles** : tout
+    l'écran clignotait, alors que le tracé ne bouge pas d'un pixel quand on décale l'heure.
+  - Chaque bloc concerné est désormais adressable, dans une enveloppe en `display:contents`
+    qui ne change rien à la mise en page.
+  - **Le curseur garde le point regardé.** Il revenait au départ à chaque décalage ; seules
+    les heures changent, pas les points de passage.
+  - En cas d'erreur réseau, on retombe sur un rendu complet plutôt que sur un écran
+    à moitié à jour.
+
+- **Le pas de 5 minutes devient le défaut** (était `Automatique`). Sur un trajet d'une
+  heure, 12 points au lieu de 8 : même si Open-Meteo ne descend pas sous 15 min, les points
+  intermédiaires tombent à des endroits différents, donc sur des intensités différentes.
+  `Automatique` reste disponible.
+  - Les étiquettes du graphe s'espacent au-delà de 12 colonnes, et leur corps diminue
+    au-delà de 10 : à 16 colonnes elles ne tiendraient plus toutes.
+  - La poignée du curseur passe **sous** les barres : son trait vertical barrait le chiffre
+    de la colonne choisie.
+
 ## 0.12.0 — Pas de temps réglable, et cap du trajet
 
 - **Pas de temps** (Réglages) : `Automatique`, 5, 10, 15 ou 30 minutes. Il décide du nombre

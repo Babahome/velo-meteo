@@ -21,10 +21,16 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
  */
 const STEPS = ['auto', 5, 10, 15, 30];
 
+// 5 minutes par défaut : c'est le pas le plus fin, et même si Open-Meteo ne
+// descend pas sous 15 min, les points intermédiaires tombent à des endroits
+// différents — donc sur des intensités différentes. Le trajet se lit plus fin.
+const DEFAULT_STEP = 5;
+
 function cleanStep(v) {
-  if (v === 'auto' || v === undefined || v === null || v === '') return 'auto';
+  if (v === undefined || v === null || v === '') return DEFAULT_STEP;
+  if (v === 'auto') return 'auto';
   const n = parseInt(v, 10);
-  return STEPS.indexOf(n) >= 0 ? n : 'auto';
+  return STEPS.indexOf(n) >= 0 ? n : DEFAULT_STEP;
 }
 
 function publicRoute(r) {
@@ -47,7 +53,7 @@ function publicTrip(trip) {
     source: trip.source || 'osrm',
     gpx_name: trip.gpx_name || null,
     gpx_file: trip.gpx_file || null,
-    step_min: trip.step_min || 'auto',
+    step_min: trip.step_min || DEFAULT_STEP,
     routes: {
       morning: publicRoute(trip.routes.morning),
       evening: publicRoute(trip.routes.evening)

@@ -4,7 +4,7 @@ Météo (pluie, vent) sur le trajet vélotaf du matin et du soir.
 
 | Add-on | Version | Port | État |
 |---|---|---|---|
-| [`velo-meteo`](velo-meteo/) | 0.12.0 | 8100 | Pas de temps réglable, cap affiché |
+| [`velo-meteo`](velo-meteo/) | 0.13.0 | 8100 | Décalage sans rechargement |
 
 Renseigne ton domicile, ton lieu de travail et tes horaires dans l'onglet Réglages :
 l'add-on géocode les adresses, calcule ton itinéraire vélo réel et affiche les prévisions
