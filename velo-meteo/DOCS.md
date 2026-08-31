@@ -119,7 +119,7 @@ formulaire ; ce qui est saisi dans l'app prend le dessus et survit aux redémarr
 
 | Onglet | Contenu |
 |---|---|
-| **Aujourd'hui** | Le trajet du jour. Matin avant 13 h, soir ensuite ; commutable à la main. |
+| **Aujourd'hui** | Le **prochain trajet à venir**, déduit des horaires enregistrés ; commutable à la main. |
 | **Créneaux** | Les départs possibles autour de l'heure habituelle, classés par score. |
 | **Historique** | Trois semaines de trajets secs / mouillés — **encore fictif**. |
 | **Réglages** | Trajet, horaires, variante de layout. |
@@ -182,6 +182,13 @@ redécoupage, les bornes de manœuvre d'OSRM étant mémorisées avec le trajet.
 
 Un trajet enregistré avant la 0.3.0 ne mémorise pas son tracé : le réglage le dit et
 demande de le réenregistrer.
+
+### Quel trajet à l'ouverture
+
+Celui qui vient. Tant que le trajet du matin n'est pas **terminé**, c'est lui ; puis celui
+du soir ; une fois le soir passé, c'est le matin du lendemain, et la prévision bascule sur
+demain toute seule. On raisonne sur la fin du trajet et non sur le départ : ouvrir l'app
+en roulant montre le trajet en cours. La bascule manuelle Matin / Soir prime toujours.
 
 ### Les repères
 

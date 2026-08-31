@@ -48,7 +48,10 @@ h1,h2,h3{margin:0}
 .topbar{
   position:sticky; top:0; z-index:20;
   padding:calc(var(--safe-top) + 10px) 14px 10px;
-  background:color-mix(in srgb,var(--bg) 88%,transparent);
+  /* Quasi opaque : a 88 %, la carte defilant dessous transparaissait et venait
+     laver les boutons Matin / Soir. Les boutons n'ont jamais ete recouverts au
+     sens de l'empilement, c'est bien la transparence qui les rendait illisibles. */
+  background:color-mix(in srgb,var(--bg) 97%,transparent);
   backdrop-filter:blur(12px);
   border-bottom:1px solid var(--line);
 }

@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.14.0 — Le prochain trajet à l'ouverture
+
+- **À l'ouverture, l'app montre le prochain trajet à venir**, plus une bascule fixe à 13 h.
+  La règle s'appuie sur les horaires enregistrés : tant que le trajet du matin n'est pas
+  **terminé** c'est lui qui compte, puis celui du soir, et une fois le soir passé c'est
+  déjà le matin du lendemain — le serveur bascule alors la prévision sur demain de
+  lui-même. Avec un départ à 07:55 et un retour à 17:30, tous deux de 55 minutes :
+
+  | Ouverture | Trajet montré |
+  |---|---|
+  | 05:30, 07:55, 08:30 | matin |
+  | 08:51, 10:00, 13:00, 18:00 | soir |
+  | 18:26, 22:49 | matin, le lendemain |
+
+  On raisonne sur la **fin** du trajet et non sur le départ : ouvrir l'app en roulant doit
+  montrer le trajet en cours. La bascule manuelle Matin / Soir prime toujours, et sans
+  trajet configuré le mode maquette garde sa règle des 13 h.
+
+Corrections :
+
+- **La carte ne déteint plus sur les boutons Matin / Soir** en défilant. Ce n'était pas un
+  problème d'empilement — vérification faite, les boutons étaient bien au-dessus et
+  cliquables — mais la barre du haut, opaque à 88 % seulement : la carte défilant dessous
+  transparaissait et venait laver les libellés. Elle passe à 97 %.
+
 ## 0.13.0 — Le décalage ne recharge plus la page
 
 - **Un appui sur ±10 min ne re-rend plus que ce qui dépend de l'heure** : verdict, profil,

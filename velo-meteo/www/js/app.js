@@ -83,9 +83,42 @@
   UI.setEngine(state.engine);
   UI.setMarkers(state.markers);
 
+  /** Minutes depuis minuit pour un "HH:MM". */
+  function hhmmToMin(v) {
+    var p = String(v || '').split(':');
+    var h = parseInt(p[0], 10), m = parseInt(p[1], 10);
+    return (isFinite(h) && isFinite(m)) ? h * 60 + m : null;
+  }
+
+  /**
+   * Trajet affiché par défaut : le **prochain à venir**, pas un horaire fixe.
+   *
+   * Tant que le trajet du matin n'est pas terminé, c'est lui qui compte ; puis
+   * celui du soir ; une fois le soir passé, c'est déjà le matin du lendemain
+   * qui intéresse — le serveur bascule alors la prévision sur demain de
+   * lui-même. On raisonne sur la fin du trajet, pas sur le départ : ouvrir
+   * l'app en roulant doit montrer le trajet en cours.
+   *
+   * Sans trajet configuré, on garde la bascule à 13 h du mode maquette.
+   */
   function currentTrip() {
-    if (state.trip) return state.trip;
-    return new Date().getHours() < 13 ? 'morning' : 'evening';
+    if (state.trip) return state.trip;   // bascule manuelle : elle prime
+
+    var t = state.config && state.config.trip;
+    var now = new Date();
+    var mins = now.getHours() * 60 + now.getMinutes();
+
+    if (!t) return mins < 13 * 60 ? 'morning' : 'evening';
+
+    var startM = hhmmToMin(t.morning_time), startE = hhmmToMin(t.evening_time);
+    if (startM === null || startE === null) return mins < 13 * 60 ? 'morning' : 'evening';
+
+    var endM = startM + ((t.routes && t.routes.morning.duration_min) || 0);
+    var endE = startE + ((t.routes && t.routes.evening.duration_min) || 0);
+
+    if (mins <= endM) return 'morning';
+    if (mins <= endE) return 'evening';
+    return 'morning';   // la journée est faite : place à demain matin
   }
 
   /* ---------- accès données (API puis repli local) ---------- */
@@ -691,7 +724,7 @@
         '<section class="card">' +
           '<div class="card-pad">' +
             '<div class="card-title">État</div>' +
-            '<div class="small muted">Version 0.13.0 · ' +
+            '<div class="small muted">Version 0.14.0 · ' +
               (state.config.configured ? 'trajet réel configuré' : 'aucun trajet : données fictives') +
               (state.offline ? ' · API injoignable' : '') + '.</div>' +
           '</div>' +
