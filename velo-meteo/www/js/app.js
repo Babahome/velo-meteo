@@ -60,6 +60,8 @@
     form: null,          // valeurs saisies dans Réglages, conservées entre deux rendus
     saving: false,
     saveMsg: null,
+    stepping: false,
+    stepMsg: null,
     // Import GPX : le fichier choisi survit aux rendus, l'<input type=file>
     // étant remis à zéro à chaque réécriture du formulaire.
     gpx: { direction: 'morning', speed: '18', file: null, busy: false, msg: null },
@@ -387,6 +389,47 @@
     return '<span class="muted">Aucune trace importée.</span>';
   }
 
+  /**
+   * Pas de temps entre deux points de passage. Sous 15 minutes, Open-Meteo
+   * renvoie le même créneau pour plusieurs points consécutifs : on gagne en
+   * finesse **spatiale** (des endroits différents), pas temporelle.
+   */
+  var STEPS = [
+    { key: 'auto', label: 'Automatique', desc: '8 points de passage quel que soit le trajet. Le réglage d’origine, lisible sur un écran de téléphone.' },
+    { key: '5', label: '5 minutes', desc: 'Le plus fin. Open-Meteo ne descend pas sous 15 min : plusieurs points liront le même créneau, mais à des endroits différents.' },
+    { key: '10', label: '10 minutes', desc: 'Bon compromis sur un trajet d’une heure.' },
+    { key: '15', label: '15 minutes', desc: 'Cale exactement sur le pas d’Open-Meteo : un point, un créneau.' },
+    { key: '30', label: '30 minutes', desc: 'Vue d’ensemble, peu de points. Utile sur les longs trajets.' }
+  ];
+
+  /** Carte « Pas de temps » de la page Réglages. */
+  function stepCard() {
+    var t = state.config.trip;
+    if (!t) return '';
+
+    var cur = String(t.step_min || 'auto');
+    var opts = STEPS.map(function (o) {
+      return '<button class="opt" data-step="' + o.key + '" aria-checked="' + (cur === o.key) +
+        '" role="radio"' + (state.stepping ? ' disabled' : '') + '><span class="mark"></span>' +
+        '<span><span class="t">' + esc(o.label) + '</span>' +
+        '<span class="d">' + esc(o.desc) + '</span></span></button>';
+    }).join('');
+
+    var msg = state.stepMsg
+      ? '<div class="card-pad" style="padding-top:0"><div class="formmsg ' + state.stepMsg.kind + '">' +
+        esc(state.stepMsg.text) + '</div></div>'
+      : '';
+
+    return '<section class="card">' +
+        '<div class="card-pad" style="padding-bottom:4px"><div class="card-title">Pas de temps</div></div>' +
+        '<div class="opt-list" role="radiogroup">' + opts + '</div>' + msg +
+        '<div class="card-pad"><div class="note">Décide du nombre de points de passage, donc du nombre de crans du ' +
+        'curseur et de colonnes du graphe. Actuellement <b>' + t.routes.morning.points + ' points</b> à l’aller. ' +
+        'Le changement rééchantillonne le trajet déjà mémorisé : ni géocodage ni calcul d’itinéraire, ' +
+        'c’est instantané.</div></div>' +
+      '</section>';
+  }
+
   var MARKER_ROLES = [
     { key: 'start', label: 'Départ' },
     { key: 'end', label: 'Arrivée' },
@@ -586,13 +629,14 @@
         '</section>' +
 
         basemapCard() +
+        stepCard() +
         markersCard() +
         radarCard() +
 
         '<section class="card">' +
           '<div class="card-pad">' +
             '<div class="card-title">État</div>' +
-            '<div class="small muted">Version 0.11.0 · ' +
+            '<div class="small muted">Version 0.12.0 · ' +
               (state.config.configured ? 'trajet réel configuré' : 'aucun trajet : données fictives') +
               (state.offline ? ' · API injoignable' : '') + '.</div>' +
           '</div>' +
@@ -668,6 +712,9 @@
       return;
     }
 
+    var st = e.target.closest('.opt[data-step]');
+    if (st) { applyStep(st.getAttribute('data-step')); return; }
+
     var ic = e.target.closest('[data-icon-role]');
     if (ic) {
       var role = ic.getAttribute('data-icon-role');
@@ -735,6 +782,25 @@
     // Retour immédiat sur le bouton, sans attendre le réseau.
     var chip = view.querySelector('.slider-actions');
     if (chip) chip.classList.toggle('pending', true);
+  }
+
+  /** Change le pas de temps : le serveur rééchantillonne le trajet mémorisé. */
+  function applyStep(step) {
+    if (state.stepping || String((state.config.trip || {}).step_min) === step) return;
+
+    state.stepping = true;
+    state.stepMsg = { kind: 'info', text: 'Rééchantillonnage du trajet…' };
+    render(true);
+
+    send('PUT', '/api/trip/step', { step_min: step }).then(function (res) {
+      state.config = res;
+      state.stepMsg = { kind: 'ok', text: 'Trajet redécoupé en ' + res.trip.routes.morning.points + ' points de passage.' };
+    }).catch(function (err) {
+      state.stepMsg = { kind: 'err', text: err.message || String(err) };
+    }).then(function () {
+      state.stepping = false;
+      render(true);
+    });
   }
 
   function importGpx() {

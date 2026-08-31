@@ -291,6 +291,45 @@
   function markerSets() { return MARKER_SETS; }
   function markerFor(role) { return markers[role]; }
 
+  /** Cap de a vers b, en degrés depuis le nord. */
+  function bearingDeg(a, b) {
+    var rad = Math.PI / 180;
+    var dLon = (b[1] - a[1]) * rad;
+    var y = Math.sin(dLon) * Math.cos(b[0] * rad);
+    var x = Math.cos(a[0] * rad) * Math.sin(b[0] * rad) -
+            Math.sin(a[0] * rad) * Math.cos(b[0] * rad) * Math.cos(dLon);
+    return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+  }
+
+  /**
+   * Cap au point `i`, pris entre le point précédent et le suivant plutôt qu'entre
+   * deux points consécutifs : la moyenne lisse les zigzags du tracé, qui feraient
+   * autrement tourner le repère à chaque virage de rue.
+   */
+  function headingAt(pts, i) {
+    if (!pts || pts.length < 2) return null;
+    var a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)];
+    if (a === b || (a[0] === b[0] && a[1] === b[1])) return null;
+    return bearingDeg(a, b);
+  }
+
+  /**
+   * Cône de cap, à la manière du point bleu des applis de navigation.
+   *
+   * L'émoji lui-même n'est **pas** pivoté : un cycliste tourné vers l'ouest se
+   * retrouverait la tête en bas, et l'orientation de départ d'un émoji change
+   * d'une plateforme à l'autre — impossible de savoir de quel côté il regarde.
+   * Le cône, lui, est dessiné par nous : il indique le cap exactement, quel que
+   * soit le repère choisi dans les réglages.
+   */
+  function headingCone(pt, deg, r) {
+    if (deg === null || deg === undefined) return '';
+    return '<g transform="translate(' + pt[0].toFixed(1) + ',' + pt[1].toFixed(1) + ') rotate(' + deg.toFixed(0) + ')">' +
+      '<path d="M0 ' + (-r - 9) + ' L-6 ' + (-r + 1) + ' L6 ' + (-r + 1) + ' Z" ' +
+        'fill="var(--accent)" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/>' +
+    '</g>';
+  }
+
   /**
    * Un repère : pastille claire puis émoji par-dessus. La pastille détache
    * l'icône du fond de carte, qui peut être aussi bien une forêt qu'un rond-point.
@@ -486,7 +525,8 @@
       var c = pxPoints[cursor];
       var onEnd = cursor === 0 || cursor === pxPoints.length - 1;
       halo = '<circle cx="' + c[0].toFixed(1) + '" cy="' + c[1].toFixed(1) +
-        '" r="' + (onEnd ? 21 : 20) + '" fill="var(--accent)" opacity="' + (onEnd ? '.32' : '.22') + '"/>';
+        '" r="' + (onEnd ? 21 : 20) + '" fill="var(--accent)" opacity="' + (onEnd ? '.32' : '.22') + '"/>' +
+        headingCone(c, headingAt(sliderPoints, cursor), onEnd ? 21 : 20);
       if (!onEnd) mark = markerSvg(c, 'cursor', 14);
     }
 
@@ -810,10 +850,12 @@
     L.polyline(line, { color: '#fff', weight: 8, opacity: 0.75, lineCap: 'round', lineJoin: 'round' }).addTo(map);
     L.polyline(line, { color: cssVar('--accent'), weight: 4, lineCap: 'round', lineJoin: 'round' }).addTo(map);
 
-    var pin = function (role, size) {
+    var pin = function (role, size, deg) {
+      var cone = (deg === null || deg === undefined) ? ''
+        : '<i class="vm-cone" style="transform:rotate(' + deg.toFixed(0) + 'deg)"></i>';
       return L.divIcon({
         className: 'vm-pin', iconSize: [size, size], iconAnchor: [size / 2, size / 2],
-        html: '<span>' + esc(markerFor(role)) + '</span>'
+        html: cone + '<span>' + esc(markerFor(role)) + '</span>'
       });
     };
 
@@ -866,7 +908,12 @@
 
       if (cursor) { map.removeLayer(cursor); cursor = null; }
       var pt = !overviewOn && data.points[frame];
-      if (pt) cursor = L.marker(pt, { icon: pin('cursor', 32), keyboard: false, zIndexOffset: 500 }).addTo(map);
+      if (pt) {
+        cursor = L.marker(pt, {
+          icon: pin('cursor', 32, headingAt(data.points, frame)),
+          keyboard: false, zIndexOffset: 500
+        }).addTo(map);
+      }
     };
 
     map.on('zoomend', el._redraw);

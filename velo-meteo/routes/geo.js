@@ -9,7 +9,7 @@
  */
 'use strict';
 
-const UA = 'velo-meteo-hassio-addon/0.11.0 (Home Assistant add-on; personal use)';
+const UA = 'velo-meteo-hassio-addon/0.12.0 (Home Assistant add-on; personal use)';
 
 const NOMINATIM = 'https://nominatim.openstreetmap.org/search';
 const REVERSE   = 'https://nominatim.openstreetmap.org/reverse';
@@ -122,15 +122,10 @@ function project(coords, aspect) {
  * Échantillonne n points régulièrement répartis le long du tracé, avec pour
  * chacun le temps de parcours cumulé et le nom de la rue traversée.
  */
-function sample(coords, steps, totalDist, totalDur, n) {
+function sample(coords, bounds, totalDist, totalDur, n) {
   const cum = [0];
   for (let i = 1; i < coords.length; i++) cum.push(cum[i - 1] + haversine(coords[i - 1], coords[i]));
   const dist = cum[cum.length - 1] || totalDist || 1;
-
-  // Bornes de distance de chaque manœuvre OSRM, pour retrouver le nom de rue.
-  const bounds = [];
-  let acc = 0;
-  (steps || []).forEach(s => { acc += s.distance || 0; bounds.push({ upTo: acc, name: (s.name || '').trim() }); });
 
   const out = [];
   for (let k = 0; k < n; k++) {
@@ -143,7 +138,7 @@ function sample(coords, steps, totalDist, totalDur, n) {
     const lat = coords[i - 1][0] + (coords[i][0] - coords[i - 1][0]) * t;
     const lon = coords[i - 1][1] + (coords[i][1] - coords[i - 1][1]) * t;
 
-    const step = bounds.find(b => target <= b.upTo);
+    const step = (bounds || []).find(b => target <= b.upTo);
     const name = step && step.name ? step.name : '';
 
     out.push({
@@ -180,10 +175,21 @@ function trackLength(coords) {
  * Met un tracé en forme pour l'app : points de passage, projection carte et
  * tracé allégé. Commun à l'itinéraire OSRM et à une trace GPX importée.
  */
-function assemble(coords, steps, distance, duration, from, to, nbPoints) {
+/** Bornes de distance de chaque manœuvre OSRM, pour retrouver le nom de rue. */
+function streetBounds(steps) {
+  const bounds = [];
+  let acc = 0;
+  (steps || []).forEach(s => {
+    acc += s.distance || 0;
+    bounds.push({ upTo: Math.round(acc), name: (s.name || '').trim() });
+  });
+  return bounds.filter(b => b.name);
+}
+
+function assemble(coords, bounds, distance, duration, from, to, nbPoints) {
   const n = nbPoints || NB_POINTS;
   const short = s => String(s).split(',')[0].trim();
-  const pts = sample(coords, steps, distance, duration, n);
+  const pts = sample(coords, bounds, distance, duration, n);
   const last = pts.length - 1;
 
   const xyPts   = project(pts.map(p => [p.lat, p.lon]).concat(coords), MAP_ASPECT);
@@ -205,8 +211,40 @@ function assemble(coords, steps, distance, duration, from, to, nbPoints) {
     track: xyTrack.filter(keep),
     // Le tracé en coordonnées réelles : la carte à tuiles le reprojette
     // elle-même en Mercator, `track` (0..1) ne lui sert à rien.
-    track_ll: coords.filter(keep).map(c => [+c[0].toFixed(5), +c[1].toFixed(5)])
+    track_ll: coords.filter(keep).map(c => [+c[0].toFixed(5), +c[1].toFixed(5)]),
+    // Les noms de rue sont conservés avec le trajet : changer le pas de temps
+    // rééchantillonne les points de passage sans rappeler OSRM, et il faut
+    // pouvoir les renommer.
+    streets: bounds || []
   };
+}
+
+/**
+ * Nombre de points de passage pour un pas de temps donné.
+ * `auto` garde les 8 points d'origine, un compromis qui tient sur un graphe de
+ * téléphone quelle que soit la durée du trajet.
+ */
+function pointsForStep(durationMin, stepMin) {
+  if (!stepMin || stepMin === 'auto') return NB_POINTS;
+  const n = Math.round((durationMin || 30) / stepMin) + 1;
+  return Math.max(3, Math.min(16, n));
+}
+
+/**
+ * Rééchantillonne un trajet déjà calculé, à partir du tracé mémorisé : aucun
+ * appel à OSRM, donc changer le pas de temps est instantané et gratuit.
+ */
+function resample(route, from, to, nbPoints) {
+  const coords = route.track_ll;
+  if (!Array.isArray(coords) || coords.length < 2) return null;
+  const next = assemble(coords, route.streets || [], route.distance_km * 1000,
+                        route.duration_min * 60, from, to, nbPoints);
+  // La distance et la durée d'origine font foi : le tracé mémorisé est allégé,
+  // sa longueur mesurée est légèrement inférieure à la vraie.
+  next.distance_km = route.distance_km;
+  next.duration_min = route.duration_min;
+  if (route.elevation_gain_m !== undefined) next.elevation_gain_m = route.elevation_gain_m;
+  return next;
 }
 
 async function buildRoute(from, to, nbPoints) {
@@ -221,7 +259,7 @@ async function buildRoute(from, to, nbPoints) {
   const coords = r.geometry.coordinates.map(c => [c[1], c[0]]); // [lon,lat] -> [lat,lon]
   const steps = (r.legs && r.legs[0] && r.legs[0].steps) || [];
 
-  return assemble(coords, steps, r.distance, r.duration, from, to, nbPoints);
+  return assemble(coords, streetBounds(steps), r.distance, r.duration, from, to, nbPoints);
 }
 
 /**
@@ -236,4 +274,7 @@ function buildRouteFromTrack(coords, from, to, durationSec, nbPoints) {
   return assemble(coords, [], distance, durationSec, from, to, nbPoints);
 }
 
-module.exports = { geocode, reverseGeocode, buildRoute, buildRouteFromTrack, trackLength, bearing, NB_POINTS };
+module.exports = {
+  geocode, reverseGeocode, buildRoute, buildRouteFromTrack, resample,
+  pointsForStep, trackLength, bearing, NB_POINTS
+};

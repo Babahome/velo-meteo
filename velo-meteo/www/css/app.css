@@ -250,7 +250,17 @@ svg.chart{cursor:ew-resize;touch-action:pan-y}
 .icon-pick[aria-pressed=true]{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset}
 
 /* Reperes Leaflet : l'emoji seul, pose sur une pastille claire. */
-.vm-pin{display:grid;place-items:center;background:none;border:0}
+.vm-pin{display:grid;place-items:center;background:none;border:0;position:relative}
+/* Cone de cap : il pivote, l'emoji non (voir headingCone dans ui.js). */
+.vm-pin .vm-cone{
+  position:absolute;inset:0;pointer-events:none
+}
+.vm-pin .vm-cone::before{
+  content:"";position:absolute;left:50%;top:-11px;transform:translateX(-50%);
+  border-left:6px solid transparent;border-right:6px solid transparent;
+  border-bottom:10px solid var(--accent);
+  filter:drop-shadow(0 0 1.5px #fff)
+}
 .vm-pin span{
   display:grid;place-items:center;width:100%;height:100%;border-radius:50%;
   background:rgba(255,255,255,.92);border:2px solid var(--accent);

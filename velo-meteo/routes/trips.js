@@ -14,10 +14,24 @@ const forecast = require('./forecast');
 const HHMM = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+/**
+ * Pas de temps entre deux points de passage. `auto` garde les 8 points
+ * d'origine. En dessous de 15 minutes, Open-Meteo renvoie le même créneau pour
+ * plusieurs points : on gagne en finesse **spatiale**, pas temporelle.
+ */
+const STEPS = ['auto', 5, 10, 15, 30];
+
+function cleanStep(v) {
+  if (v === 'auto' || v === undefined || v === null || v === '') return 'auto';
+  const n = parseInt(v, 10);
+  return STEPS.indexOf(n) >= 0 ? n : 'auto';
+}
+
 function publicRoute(r) {
   return {
     distance_km: r.distance_km,
     duration_min: r.duration_min,
+    points: (r.points || []).length,
     elevation_gain_m: r.elevation_gain_m === undefined ? null : r.elevation_gain_m
   };
 }
@@ -33,11 +47,19 @@ function publicTrip(trip) {
     source: trip.source || 'osrm',
     gpx_name: trip.gpx_name || null,
     gpx_file: trip.gpx_file || null,
+    step_min: trip.step_min || 'auto',
     routes: {
       morning: publicRoute(trip.routes.morning),
       evening: publicRoute(trip.routes.evening)
     }
   };
+}
+
+/** Rééchantillonne un trajet au pas demandé, sans rappeler le routeur. */
+function applyStep(route, from, to, step) {
+  const n = geo.pointsForStep(route.duration_min, step);
+  if (n === (route.points || []).length) return route;
+  return geo.resample(route, from, to, n) || route;
 }
 
 // GET /api/trip - configuration courante
@@ -64,11 +86,17 @@ router.post('/', async (req, res) => {
     await sleep(1100); // Nominatim : 1 requête par seconde maximum
     const work = await geo.geocode(b.work_address);
 
-    const [mRoute, eRoute] = [await geo.buildRoute(home, work), await geo.buildRoute(work, home)];
+    // Le pas de temps déjà choisi est conservé d'un recalcul à l'autre.
+    const step = cleanStep((store.getTrip() || {}).step_min);
+    let mRoute = await geo.buildRoute(home, work);
+    let eRoute = await geo.buildRoute(work, home);
+    mRoute = applyStep(mRoute, home, work, step);
+    eRoute = applyStep(eRoute, work, home, step);
 
     const trip = store.setTrip({
       home, work, morning_time, evening_time,
       source: 'osrm',
+      step_min: step,
       routes: { morning: mRoute, evening: eRoute },
       updated_at: new Date().toISOString()
     });
@@ -133,9 +161,12 @@ router.post('/gpx', express.text({ type: () => true, limit: '12mb' }), async (re
       end = fallback(last, 'Arrivée de la trace');
     }
 
+    const step = cleanStep((store.getTrip() || {}).step_min);
+    const nFwd = geo.pointsForStep(Math.round(duration / 60), step);
+
     const reversed = coords.slice().reverse();
-    const forward = geo.buildRouteFromTrack(coords, start, end, duration);
-    const backward = geo.buildRouteFromTrack(reversed, end, start, duration);
+    const forward = geo.buildRouteFromTrack(coords, start, end, duration, nFwd);
+    const backward = geo.buildRouteFromTrack(reversed, end, start, duration, nFwd);
     forward.elevation_gain_m = gain;
     backward.elevation_gain_m = gpx.elevationGain(track.eles.slice().reverse());
 
@@ -147,6 +178,7 @@ router.post('/gpx', express.text({ type: () => true, limit: '12mb' }), async (re
     const trip = store.setTrip({
       home, work, morning_time, evening_time,
       source: 'gpx',
+      step_min: step,
       gpx_name: track.name || null,
       gpx_file: filename,
       routes: direction === 'morning'
@@ -171,6 +203,38 @@ router.post('/gpx', express.text({ type: () => true, limit: '12mb' }), async (re
   } catch (e) {
     res.status(502).json({ error: e.message || String(e) });
   }
+});
+
+/**
+ * PUT /api/trip/step - change le pas de temps.
+ *
+ * Le trajet est rééchantillonné à partir du tracé déjà mémorisé : ni Nominatim
+ * ni OSRM ne sont rappelés, l'opération est instantanée et n'use aucun quota.
+ */
+router.put('/step', (req, res) => {
+  const trip = store.getTrip();
+  if (!store.isConfigured(trip)) return res.status(404).json({ error: 'Aucun trajet configuré.' });
+
+  const step = cleanStep((req.body || {}).step_min);
+  const ends = { morning: [trip.home, trip.work], evening: [trip.work, trip.home] };
+
+  const missing = ['morning', 'evening'].some(t => !Array.isArray(trip.routes[t].track_ll));
+  if (missing) {
+    return res.status(409).json({
+      error: 'Ce trajet a été calculé par une version antérieure et ne mémorise pas son tracé. ' +
+             'Réenregistre-le pour pouvoir changer le pas de temps.'
+    });
+  }
+
+  ['morning', 'evening'].forEach(t => {
+    trip.routes[t] = applyStep(trip.routes[t], ends[t][0], ends[t][1], step);
+  });
+  trip.step_min = step;
+  trip.updated_at = new Date().toISOString();
+
+  store.setTrip(trip);
+  forecast.invalidate();
+  res.json({ configured: true, trip: publicTrip(trip) });
 });
 
 /** PUT /api/trip/times - change les horaires sans recalculer l'itinéraire. */

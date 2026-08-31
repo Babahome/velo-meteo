@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.12.0 — Pas de temps réglable, et cap du trajet
+
+- **Pas de temps** (Réglages) : `Automatique`, 5, 10, 15 ou 30 minutes. Il décide du nombre
+  de points de passage, donc du nombre de crans du curseur et de colonnes du graphe. Sur
+  un trajet de 55 min : 3 points à 30 min, 5 à 15, 7 à 10, 12 à 5, et 8 en automatique.
+  - Le changement **rééchantillonne le tracé déjà mémorisé** : ni Nominatim ni OSRM ne sont
+    rappelés, c'est instantané et ça n'use aucun quota.
+  - Les **noms de rue survivent** au redécoupage : les bornes de manœuvre d'OSRM sont
+    désormais mémorisées avec le trajet, faute de quoi les points intermédiaires seraient
+    retombés sur un « km 5,3 ».
+  - Sous 15 minutes, Open-Meteo renvoie le même créneau pour plusieurs points consécutifs.
+    On gagne alors en finesse **spatiale** — des endroits différents — pas temporelle. Le
+    réglage le dit.
+  - `Automatique` reste le défaut et garde le comportement d'avant.
+
+- **Cap du trajet** au point choisi : un cône pivote autour du repère, à la manière du
+  point bleu des applis de navigation.
+  - L'émoji lui-même n'est **pas** pivoté. Un cycliste tourné vers l'ouest se retrouverait
+    la tête en bas, et l'orientation de départ d'un émoji change d'une plateforme à
+    l'autre — impossible de savoir de quel côté il regarde. Le cône, lui, est dessiné par
+    nous : il indique le cap exactement, et fonctionne avec n'importe quel repère choisi.
+  - Le cap est pris **entre le point précédent et le suivant** : la moyenne lisse les
+    zigzags du tracé, qui feraient autrement tourner le repère à chaque virage de rue.
+
 ## 0.11.0 — Le curseur se cale sur le graphe, et s'y attrape
 
 - **Les boutons de décalage n'affichent plus que `−` et `+`.** Ce n'est pas qu'esthétique :

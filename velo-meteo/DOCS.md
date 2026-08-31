@@ -161,6 +161,23 @@ zoom au-dessus et pose les tuiles à demi-taille. Les deux moteurs le font (`til
 côté maison, `detectRetina` côté Leaflet). Ce qui change entre eux, c'est le confort de
 manipulation et l'écosystème de contrôles, pas la netteté.
 
+### Le pas de temps
+
+**Réglages → Pas de temps** : `Automatique`, 5, 10, 15 ou 30 minutes. Il décide du nombre
+de points de passage, donc du nombre de crans du curseur et de colonnes du graphe. Sur un
+trajet de 55 minutes : 3 points à 30 min, 5 à 15, 7 à 10, 12 à 5 — et 8 en automatique,
+le comportement d'origine.
+
+Le changement **rééchantillonne le tracé déjà mémorisé** : ni géocodage ni calcul
+d'itinéraire, c'est instantané et ça n'use aucun quota. Les noms de rue survivent au
+redécoupage, les bornes de manœuvre d'OSRM étant mémorisées avec le trajet.
+
+> **Sous 15 minutes**, Open-Meteo renvoie le même créneau pour plusieurs points consécutifs :
+> on gagne en finesse **spatiale** (des endroits différents), pas temporelle.
+
+Un trajet enregistré avant la 0.3.0 ne mémorise pas son tracé : le réglage le dit et
+demande de le réenregistrer.
+
 ### Les repères
 
 🏠 le départ, 🏢 l'arrivée, 🚴 la position choisie au curseur. Trois formes franchement
@@ -169,6 +186,13 @@ carte. Chacun se change dans **Réglages → Repères de la carte**.
 
 Aux deux extrémités du curseur, la position tombe exactement sur le départ ou l'arrivée :
 seul le halo est alors dessiné, pour ne pas masquer l'icône qu'on cherche à distinguer.
+
+Un **cône de cap** pivote autour du repère de position, à la manière du point bleu des
+applis de navigation. L'émoji, lui, reste droit : un cycliste tourné vers l'ouest se
+retrouverait la tête en bas, et l'orientation de départ d'un émoji change d'une plateforme
+à l'autre. Le cône est dessiné par l'app, donc fiable, et fonctionne avec n'importe quel
+repère choisi. Le cap est pris entre le point précédent et le suivant, ce qui lisse les
+zigzags du tracé.
 
 ### Les nuages de pluie
 
@@ -364,6 +388,7 @@ Toutes les routes renvoient `source: "live"` ou `"mock"`, et `error` quand un re
 | `POST /api/trip` | Géocode et calcule les itinéraires. Corps : `home_address`, `work_address`, `morning_time`, `evening_time` |
 | `POST /api/trip/gpx` | Importe une trace GPX. Corps : le fichier brut. Query : `direction`, `speed_kmh`, `morning_time`, `evening_time` |
 | `PUT /api/trip/times` | Change les horaires sans recalculer l'itinéraire |
+| `PUT /api/trip/step` | Change le pas de temps. Rééchantillonne le tracé mémorisé, sans appel externe |
 | `DELETE /api/trip` | Efface le trajet, retour au mode maquette |
 | `GET /api/options` | Options de l'add-on |
 | `GET /health` | `{ status, version, configured }` |
