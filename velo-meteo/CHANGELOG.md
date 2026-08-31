@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.7.0 — Tuiles nettes, et Leaflet en second moteur
+
+- **La carte n'est plus floue sur téléphone.** Les tuiles étaient posées à leur taille
+  nominale (256 px) alors qu'un écran de téléphone affiche 2 à 3 pixels physiques par
+  pixel CSS : elles étaient donc agrandies d'autant. L'app demande maintenant le zoom
+  au-dessus et pose les tuiles à demi-taille — même cadrage, deux fois plus de pixels.
+  C'est exactement ce que fait `detectRetina` dans Leaflet.
+
+  À noter : **la netteté ne venait pas du moteur de rendu.** Leaflet affiche les mêmes
+  images raster ; c'est la densité demandée qui compte, et elle se règle des deux côtés.
+
+- **Second moteur de carte : Leaflet** (Réglages → Moteur de carte), pour comparer sur le
+  terrain. Il rend le même contenu — tuiles, tracé, nuages de pluie floutés dans un
+  calque dédié, marqueurs, point du curseur — et reste piloté par le même curseur de
+  parcours.
+  - Leaflet 1.9.4 est embarqué dans `www/vendor/leaflet/` (160 ko), mais **chargé
+    seulement s'il est choisi** : le mode par défaut ne paie rien.
+  - Si le fichier manque, l'app retombe sur le rendu maison plutôt que sur une carte vide.
+
 ## 0.6.0 — Carte interactive, fonds IGN, modèle AROME
 
 - **La carte se déplace et se zoome.** C'était bien une image fixe : les tuiles étaient

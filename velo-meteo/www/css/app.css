@@ -182,9 +182,19 @@ svg.chart,svg.map{display:block;width:100%;height:auto}
 }
 .mapcanvas:active{cursor:grabbing}
 .mapcanvas .tilelayer{position:absolute;inset:0}
-.mapcanvas .tile{position:absolute;width:256px;height:256px;display:block;border:0}
+.mapcanvas .tile{position:absolute;display:block;border:0}
 .mapcanvas.notiles .tile{display:none}
 .mapcanvas .maplayer{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+
+/* Leaflet dessine dans le meme conteneur : on aligne son habillage sur le
+   theme de l'app, et on neutralise le fond blanc de son conteneur. */
+.mapcanvas .leaflet-container{background:var(--surface-2);font:inherit;height:100%;width:100%}
+.mapcanvas .leaflet-bar a{
+  background:color-mix(in srgb,var(--surface) 92%,transparent);color:var(--text);
+  border-bottom-color:var(--line)
+}
+.mapcanvas .leaflet-bar a:hover{background:var(--surface)}
+.mapcanvas .leaflet-touch .leaflet-bar a{width:34px;height:34px;line-height:34px}
 
 /* Commandes de la carte, en haut a droite. */
 .mapctl{position:absolute;top:8px;right:8px;display:flex;flex-direction:column;gap:6px}

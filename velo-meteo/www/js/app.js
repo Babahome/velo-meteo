@@ -8,6 +8,17 @@
   var UI = w.VM_UI, MOCK = w.VM_MOCK;
   var esc = UI.esc, num = UI.num;
 
+  var ENGINE_DESC = {
+    'maison': {
+      name: 'Maison',
+      desc: 'Les tuiles posées à la main, ~120 lignes, rien à charger. Le défaut.'
+    },
+    'leaflet': {
+      name: 'Leaflet',
+      desc: 'La bibliothèque de référence, embarquée dans l’add-on (160 ko, chargés seulement si tu la choisis). Mêmes tuiles : c’est le confort de manipulation qui change, pas la netteté.'
+    }
+  };
+
   var BASEMAP_DESC = {
     osm: 'Le fond mondial d’OpenStreetMap. Pistes cyclables bien rendues, disponible partout.',
     ign: 'La carte de l’IGN, France uniquement. Chemins, sentiers et relief plus détaillés.',
@@ -54,10 +65,12 @@
     gpx: { direction: 'morning', speed: '18', file: null, busy: false, msg: null },
     field: { available: false, cells: [] },
     demoRain: localStorage.getItem('vm.demo-rain') === '1',
-    basemap: localStorage.getItem('vm.basemap') || 'osm'
+    basemap: localStorage.getItem('vm.basemap') || 'osm',
+    engine: localStorage.getItem('vm.engine') || 'maison'
   };
 
   UI.setBasemap(state.basemap);
+  UI.setEngine(state.engine);
 
   function currentTrip() {
     if (state.trip) return state.trip;
@@ -373,6 +386,21 @@
         '<div class="card-pad"><div class="note">Les fonds IGN viennent de la Géoplateforme, ' +
         'sans clé d’API et sous Licence Ouverte Etalab. La carte se déplace au doigt et se zoome ' +
         'au pincement, à la molette ou avec les boutons ; ⌖ la recadre sur le trajet.</div></div>' +
+      '</section>' +
+
+      '<section class="card">' +
+        '<div class="card-pad" style="padding-bottom:4px"><div class="card-title">Moteur de carte</div></div>' +
+        '<div class="opt-list" role="radiogroup">' +
+          UI.engineKeys().map(function (k) {
+            return '<button class="opt" data-engine="' + k + '" aria-checked="' + (state.engine === k) +
+              '" role="radio"><span class="mark"></span>' +
+              '<span><span class="t">' + esc(ENGINE_DESC[k].name) + '</span>' +
+              '<span class="d">' + esc(ENGINE_DESC[k].desc) + '</span></span></button>';
+          }).join('') +
+        '</div>' +
+        '<div class="card-pad"><div class="note">Les deux moteurs affichent exactement les mêmes ' +
+        'tuiles. Sur un écran haute densité, ils demandent tous deux le zoom au-dessus en tuiles ' +
+        'à demi-taille : c’est de là que vient la netteté, pas de la bibliothèque.</div></div>' +
       '</section>';
   }
 
@@ -519,7 +547,7 @@
         '<section class="card">' +
           '<div class="card-pad">' +
             '<div class="card-title">État</div>' +
-            '<div class="small muted">Version 0.6.0 · ' +
+            '<div class="small muted">Version 0.7.0 · ' +
               (state.config.configured ? 'trajet réel configuré' : 'aucun trajet : données fictives') +
               (state.offline ? ' · API injoignable' : '') + '.</div>' +
           '</div>' +
@@ -588,6 +616,15 @@
   });
 
   view.addEventListener('click', function (e) {
+    var eng = e.target.closest('.opt[data-engine]');
+    if (eng) {
+      state.engine = eng.getAttribute('data-engine');
+      localStorage.setItem('vm.engine', state.engine);
+      UI.setEngine(state.engine);
+      render(true);
+      return;
+    }
+
     var bm = e.target.closest('.opt[data-basemap]');
     if (bm) {
       state.basemap = bm.getAttribute('data-basemap');

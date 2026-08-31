@@ -210,11 +210,61 @@
 
   var basemap = 'osm';
   function setBasemap(key) { basemap = BASEMAPS[key] ? key : 'osm'; }
+
+  /**
+   * Deux moteurs de rendu, pour pouvoir les comparer sur le terrain.
+   *
+   *  - `maison` : les tuiles posées à la main, ~120 lignes, rien à charger.
+   *  - `leaflet` : la bibliothèque de référence, embarquée dans `www/vendor`.
+   *
+   * Leaflet n'est **pas** chargé tant qu'il n'est pas choisi : 160 ko de plus
+   * sur chaque ouverture de l'app ne se justifient pas pour un mode de
+   * comparaison. Les deux affichent les mêmes tuiles — la netteté ne vient pas
+   * du moteur mais de la densité de pixels demandée (voir `tileScale`).
+   */
+  var engine = 'maison';
+  function setEngine(key) { engine = key === 'leaflet' ? 'leaflet' : 'maison'; }
+  function engineKeys() { return ['maison', 'leaflet']; }
+
+  var leafletLoading = null;
+
+  function ensureLeaflet(done) {
+    if (w.L) return done(true);
+    if (leafletLoading) { leafletLoading.push(done); return; }
+    leafletLoading = [done];
+
+    var css = d.createElement('link');
+    css.rel = 'stylesheet';
+    css.href = '/vendor/leaflet/leaflet.css';
+    d.head.appendChild(css);
+
+    var js = d.createElement('script');
+    js.src = '/vendor/leaflet/leaflet.js';
+    js.onload = function () { leafletLoading.forEach(function (f) { f(true); }); leafletLoading = null; };
+    js.onerror = function () { leafletLoading.forEach(function (f) { f(false); }); leafletLoading = null; };
+    d.head.appendChild(js);
+  }
+
+  /** Résout une variable CSS : Leaflet pose `fill` en attribut, pas en style. */
+  function cssVar(name) {
+    return getComputedStyle(d.documentElement).getPropertyValue(name).trim() || '#2563eb';
+  }
   function basemapKeys() { return Object.keys(BASEMAPS); }
   function basemapName(key) { return (BASEMAPS[key] || BASEMAPS.osm).name; }
 
   var TILE_SIZE = 256;
   var MIN_ZOOM  = 3;
+
+  /**
+   * Un téléphone affiche 2 à 3 pixels physiques par pixel CSS : une tuile posée
+   * à sa taille nominale y est agrandie d'autant, d'où un rendu mou. On prend
+   * donc le zoom au-dessus et on affiche les tuiles à demi-taille — même cadrage,
+   * deux fois plus de pixels. C'est ce que fait `detectRetina` dans Leaflet.
+   */
+  function tileScale(z, conf) {
+    var dpr = w.devicePixelRatio || 1;
+    return (dpr >= 1.5 && z + 1 <= conf.maxZoom) ? 2 : 1;
+  }
   var FIT_ZOOM  = 17;         // zoom maximal au cadrage automatique
   var MAP_RATIO = 210 / 340;  // hauteur / largeur de la carte
   var MAP_PAD   = 0.12;       // le tracé ne doit pas toucher les bords
@@ -383,14 +433,17 @@
    */
   function layoutTiles(el, v) {
     var conf = BASEMAPS[basemap] || BASEMAPS.osm;
-    var n = Math.pow(2, v.z);
-    var need = {};
+    var scale = tileScale(v.z, conf);
+    var tileZ = v.z + scale - 1;      // un cran plus haut en haute densité
+    var px    = TILE_SIZE / scale;    // ...et des tuiles deux fois plus petites
+    var n     = Math.pow(2, tileZ);
+    var need  = {};
 
-    for (var tx = Math.floor(v.originX / TILE_SIZE) - 1; tx <= Math.floor((v.originX + v.W) / TILE_SIZE) + 1; tx++) {
-      for (var ty = Math.floor(v.originY / TILE_SIZE) - 1; ty <= Math.floor((v.originY + v.H) / TILE_SIZE) + 1; ty++) {
+    for (var tx = Math.floor(v.originX / px) - 1; tx <= Math.floor((v.originX + v.W) / px) + 1; tx++) {
+      for (var ty = Math.floor(v.originY / px) - 1; ty <= Math.floor((v.originY + v.H) / px) + 1; ty++) {
         if (ty < 0 || ty >= n) continue;
         var wx = ((tx % n) + n) % n;   // la longitude s'enroule, pas la latitude
-        need[v.z + '/' + wx + '/' + ty] = [tx, ty, wx];
+        need[tileZ + '/' + wx + '/' + ty] = [tx, ty, wx];
       }
     }
 
@@ -401,13 +454,14 @@
         img.className = 'tile';
         img.alt = '';
         img.decoding = 'async';
-        img.src = conf.url.replace('{z}', v.z).replace('{x}', t[2]).replace('{y}', t[1]);
+        img.src = conf.url.replace('{z}', tileZ).replace('{x}', t[2]).replace('{y}', t[1]);
         img.addEventListener('error', function () { tileFailed(el, v); });
         v.layer.appendChild(img);
         v.tiles[key] = img;
       }
-      img.style.left = (t[0] * TILE_SIZE - v.originX).toFixed(1) + 'px';
-      img.style.top  = (t[1] * TILE_SIZE - v.originY).toFixed(1) + 'px';
+      img.style.width = img.style.height = px + 'px';
+      img.style.left = (t[0] * px - v.originX).toFixed(1) + 'px';
+      img.style.top  = (t[1] * px - v.originY).toFixed(1) + 'px';
     });
 
     Object.keys(v.tiles).forEach(function (key) {
@@ -515,11 +569,29 @@
 
     var W = Math.round(el.clientWidth);
     if (!W) return;                                  // encore replié dans un <details>
-    if (el.getAttribute('data-w') === String(W) && el._vm) return;
+    if (el.getAttribute('data-w') === String(W) && el._mounted) return;
     el.setAttribute('data-w', String(W));
 
     var H = Math.round(W * MAP_RATIO);
     el.style.height = H + 'px';
+
+    if (engine === 'leaflet') {
+      ensureLeaflet(function (ok) {
+        // Leaflet indisponible (fichier absent) : on retombe sur le rendu maison
+        // plutôt que sur une carte vide.
+        if (ok && w.L) mountLeafletMap(el, data, W, H);
+        else mountCanvasMap(el, data, W, H);
+      });
+      return;
+    }
+    mountCanvasMap(el, data, W, H);
+  }
+
+  function mountCanvasMap(el, data, W, H) {
+    // En revenant de Leaflet, sa carte garde des écouteurs sur window : il faut
+    // la fermer explicitement, vider le conteneur ne suffit pas.
+    if (el._map) { el._map.remove(); el._map = null; }
+    el._mounted = 'maison';
 
     el.innerHTML = '<div class="tilelayer"></div><svg class="maplayer"></svg>' +
       '<div class="mapctl">' +
@@ -534,6 +606,10 @@
     var v = { W: W, H: H, data: data, tiles: {}, failed: 0,
               layer: el.querySelector('.tilelayer'), cells: data.cells };
     el._vm = v;
+    el._redraw = function () {
+      var svg = el.querySelector('.maplayer');
+      if (svg) svg.outerHTML = layerFor(el);
+    };
     fitView(v);
     applyView(el, v);
 
@@ -558,19 +634,21 @@
    * Calque SVG de la carte : nuages de l'image courante, tracé, marqueurs.
    * `frame` vaut null pour la vue d'ensemble, sinon le rang du point de passage.
    */
+  function currentCells() {
+    if (!field.available) return null;
+    if (overviewOn) return field.cells;
+    var f = field.frames && field.frames[frame];
+    if (!f || f.found === false) return null;
+    return f.rates.map(function (rate, j) {
+      return { lat: field.cells[j].lat, lon: field.cells[j].lon, rate: rate };
+    });
+  }
+
   function layerFor(el) {
     var v = el._vm;
     if (!v) return '';
 
-    var cells = null;
-    if (field.available) {
-      if (overviewOn) cells = field.cells;
-      else if (field.frames && field.frames[frame] && field.frames[frame].found !== false) {
-        cells = field.frames[frame].rates.map(function (rate, j) {
-          return { lat: field.cells[j].lat, lon: field.cells[j].lon, rate: rate };
-        });
-      }
-    }
+    var cells = currentCells();
 
     var rain = '';
     if (cells && cells.length) {
@@ -584,12 +662,100 @@
     return overlaySvg(v.W, v.H, v.coords, v.points, v.cells, rain, overviewOn ? null : frame);
   }
 
+  /**
+   * Même contenu que le rendu maison, dessiné par Leaflet : tuiles, nuages,
+   * tracé, marqueurs, point du curseur. Les nuages vont dans un calque dédié
+   * pour recevoir le flou sans emporter le tracé avec eux.
+   */
+  function mountLeafletMap(el, data, W, H) {
+    var L = w.L;
+    var conf = BASEMAPS[basemap] || BASEMAPS.osm;
+
+    if (el._map) { el._map.remove(); el._map = null; }
+    el._mounted = 'leaflet';
+    el.innerHTML = '';
+    el.classList.toggle('raw', !conf.invertible);
+
+    var map = L.map(el, { attributionControl: false, zoomSnap: 1 });
+    el._map = el._vm = null;
+
+    // detectRetina applique exactement la même astuce que `tileScale` : un cran
+    // de zoom en plus, des tuiles à demi-taille.
+    L.tileLayer(conf.url, { detectRetina: true, maxZoom: conf.maxZoom, className: 'tile' }).addTo(map);
+
+    map.createPane('rain');
+    var rainPane = map.getPane('rain');
+    rainPane.style.zIndex = 350;   // au-dessus des tuiles, sous le tracé
+
+    var line = data.coords.map(function (c) { return [c[0], c[1]]; });
+    L.polyline(line, { color: '#fff', weight: 8, opacity: 0.75, lineCap: 'round', lineJoin: 'round' }).addTo(map);
+    L.polyline(line, { color: cssVar('--accent'), weight: 4, lineCap: 'round', lineJoin: 'round' }).addTo(map);
+
+    var a = data.points[0], b = data.points[data.points.length - 1];
+    L.circleMarker(a, { radius: 7, color: cssVar('--accent'), weight: 3, fillColor: '#fff', fillOpacity: 1 }).addTo(map);
+    L.circleMarker(b, { radius: 7, color: '#fff', weight: 3, fillColor: cssVar('--accent'), fillOpacity: 1 }).addTo(map);
+
+    map.fitBounds(L.latLngBounds(line), { padding: [14, 14] });
+
+    // Bouton de recadrage, l'équivalent du ⌖ du rendu maison.
+    var Fit = L.Control.extend({
+      options: { position: 'topright' },
+      onAdd: function () {
+        var box = L.DomUtil.create('div', 'leaflet-bar');
+        var btn = L.DomUtil.create('a', '', box);
+        btn.href = '#';
+        btn.title = 'Recadrer sur le trajet';
+        btn.innerHTML = '⌖';
+        L.DomEvent.on(btn, 'click', function (e) {
+          L.DomEvent.stop(e);
+          map.fitBounds(L.latLngBounds(line), { padding: [14, 14] });
+        });
+        return box;
+      }
+    });
+    map.addControl(new Fit());
+
+    var rain = L.layerGroup([], { pane: 'rain' }).addTo(map);
+    var cursor = null;
+
+    el._redraw = function () {
+      rain.clearLayers();
+      var cells = currentCells();
+
+      if (cells && cells.length) {
+        var metres = field.step_lat * 111320;
+        cells.forEach(function (c) {
+          if (c.rate < 0.05) return;
+          L.circle([c.lat, c.lon], {
+            pane: 'rain', radius: metres * 0.78, stroke: false,
+            fillColor: cssVar('--rain-' + Math.max(1, rainTier(c.rate))),
+            fillOpacity: Math.min(0.6, 0.1 + c.rate * 0.1)
+          }).addTo(rain);
+        });
+        // Le flou se règle en pixels écran : il doit suivre le zoom courant.
+        var p1 = map.latLngToLayerPoint([cells[0].lat, cells[0].lon]);
+        var p2 = map.latLngToLayerPoint([cells[0].lat + field.step_lat, cells[0].lon]);
+        rainPane.style.filter = 'blur(' + Math.max(5, Math.abs(p1.y - p2.y) * 0.34).toFixed(1) + 'px)';
+      }
+
+      if (cursor) { map.removeLayer(cursor); cursor = null; }
+      var pt = !overviewOn && data.points[frame];
+      if (pt) {
+        cursor = L.circleMarker(pt, {
+          radius: 6.5, color: cssVar('--accent'), weight: 4, fillColor: '#fff', fillOpacity: 1
+        }).addTo(map);
+      }
+    };
+
+    map.on('zoomend', el._redraw);
+    el._map = map;
+    el._redraw();
+  }
+
   /** Redessine le calque de chaque carte affichée, sans retoucher aux tuiles. */
   function redrawLayers(root) {
     Array.prototype.forEach.call((root || d).querySelectorAll('.mapcanvas[data-map]'), function (el) {
-      if (!el._vm) return;
-      var svg = el.querySelector('.maplayer');
-      if (svg) svg.outerHTML = layerFor(el);
+      if (el._redraw) el._redraw();
     });
   }
 
@@ -791,6 +957,7 @@
     verdictCard: verdictCard, profileStrip: profileStrip, windCard: windCard,
     rainChart: rainChart, radarMap: radarMap, mountMaps: mountMaps, routeSummary: routeSummary,
     setField: setField, setFrame: setFrame, setOverview: setOverview,
-    setBasemap: setBasemap, basemapKeys: basemapKeys, basemapName: basemapName
+    setBasemap: setBasemap, basemapKeys: basemapKeys, basemapName: basemapName,
+    setEngine: setEngine, engineKeys: engineKeys
   };
 })(window, document);

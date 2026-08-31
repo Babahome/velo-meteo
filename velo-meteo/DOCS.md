@@ -145,7 +145,21 @@ assombries — une carte claire éblouit la nuit — mais pas la photo aérienne
 inversion transformerait en négatif. Sans accès Internet, seul le tracé reste, sur fond
 neutre, et la légende le dit.
 
-> Pas de Leaflet ni de MapLibre : voir *Choix techniques*.
+### Deux moteurs de rendu
+
+**Réglages → Moteur de carte** bascule entre :
+
+- **Maison** (défaut) : les tuiles posées à la main, ~120 lignes, rien à charger.
+- **Leaflet** : la bibliothèque de référence, embarquée dans `www/vendor/leaflet/`
+  (160 ko) et **chargée seulement si elle est choisie**. Elle rend le même contenu et
+  obéit au même curseur de parcours.
+
+Les deux affichent **exactement les mêmes tuiles**. Une bibliothèque carto ne rend pas un
+fond raster plus net — elle affiche les mêmes images. Ce qui compte est la **densité
+demandée** : sur un écran où un pixel CSS vaut 2 ou 3 pixels physiques, l'app prend le
+zoom au-dessus et pose les tuiles à demi-taille. Les deux moteurs le font (`tileScale`
+côté maison, `detectRetina` côté Leaflet). Ce qui change entre eux, c'est le confort de
+manipulation et l'écosystème de contrôles, pas la netteté.
 
 ### Les nuages de pluie
 
@@ -245,6 +259,7 @@ velo-meteo/
    ├─ index.html    coquille + barre d'onglets
    ├─ manifest.json PWA : nom, couleurs, icônes du raccourci
    ├─ icons/        icônes 192/512, maskable, apple-touch (dérivées de icon.png)
+   ├─ vendor/       Leaflet 1.9.4, chargé à la demande (second moteur de carte)
    ├─ css/app.css   thème clair et sombre, safe areas, contraste extérieur
    └─ js/
       ├─ mock.js    données de repli si l'API est injoignable
@@ -273,7 +288,7 @@ l'enregistrement, jamais en boucle. Données © contributeurs OpenStreetMap.
 |---|---|---|
 | React + Vite | HTML/CSS/JS vanilla | Pas d'étape de build : image Docker construite en quelques secondes sur le Pi, et une modif de layout est visible après un simple redémarrage. Aligné sur `sudoku` et `kitchencore`. |
 | Recharts | Graphe SVG écrit à la main | ~60 lignes, aucune dépendance. |
-| MapLibre GL JS / Leaflet | Tuiles posées à la main + calque SVG | Le déplacement et le zoom tiennent en ~120 lignes et réutilisent la projection déjà en place. Une bibliothèque aurait coûté 45 à 200 ko dans l'image Docker **et** la réécriture de tout le calque (tracé, nuages, curseur) dans son système de coordonnées. |
+| MapLibre GL JS / Leaflet | Tuiles posées à la main par défaut, **Leaflet disponible en second moteur** | Le déplacement et le zoom tiennent en ~120 lignes et réutilisent la projection déjà en place. Leaflet est embarqué pour comparaison, chargé seulement s'il est choisi. Les deux rendent les mêmes tuiles : une bibliothèque n'améliore pas la netteté d'un fond raster. |
 | Tuiles radar RainViewer | Grille Open-Meteo dessinée en SVG | RainViewer plafonne au zoom 7 en accès libre : trop grossier pour un vélotaf. Et il montre « maintenant » là où le reste de l'app montre l'heure de départ. |
 | Une lib GPX | Lecture à l'expression régulière | Un GPX est un XML plat dont on n'exploite que `trkpt`, `ele` et `time`. Ajouter un parseur XML complet à une image qui ne contient qu'express pour quatre balises ne se justifie pas. |
 | SQLite (`better-sqlite3`) | JSON dans `/data` | Compilation native très lente sur armv7/aarch64 pour un volume de données minuscule. |
