@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.15.0 — Comparer les modèles, rejouer une vraie journée de pluie
+
+- **Mode debug** (Réglages) : cinq modèles Open-Meteo côte à côte sur le trajet et le
+  créneau courants — cumul, pic, probabilité maximale. Un seul appel les couvre tous, le
+  paramètre `models` acceptant une liste.
+  - « Enregistrer ce relèvé » ajoute une ligne à `/data/models-log.ndjson`. Une
+    automatisation Home Assistant appelant `/api/debug/models?type=morning&log=1` une fois
+    par jour constitue l'historique toute seule.
+- **`tools/replay.js`** : rejouer une journée passée pour tester l'app avec de vraies
+  données de pluie, sans attendre qu'il pleuve.
+  - `scan` liste les journées pluvieuses du trajet **avec l'heure du pic** — une journée à
+    34 mm ne sert à rien si tout est tombé pendant qu'on était au bureau.
+  - `day <date> --at HH:MM` compare, point de passage par point de passage, ce que chaque
+    modèle avait prévu à ce que l'archive ERA5 a mesuré, avec écart moyen, biais et
+    accord sur le verdict pluie / pas pluie.
+  - `--fixture` écrit le résultat dans un fichier réutilisable comme jeu d'essai.
+
+**AROME France HD : évalué, non retenu comme modèle à part.** L'app garde
+`meteofrance_seamless`, qui sert déjà AROME HD en pratique : sur dix villes françaises et
+deux jours au pas de 15 minutes, les deux modèles s'accordent sur **1917 créneaux sur
+1920**, et les trois écarts sont des créneaux où `seamless` a une donnée que AROME HD n'a
+pas. AROME HD seul s'arrête par ailleurs à environ 48 h, là où `seamless` enchaîne sur
+ARPEGE. Le pinner ne gagnerait rien et coûterait de la couverture. Il reste dans la
+comparaison du mode debug, pour continuer à le surveiller.
+
 ## 0.14.1 — La ligne du curseur allégée
 
 - **L'heure seule** sous le curseur. Le nom de rue et le kilométrage changeaient de forme

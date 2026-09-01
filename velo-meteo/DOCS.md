@@ -326,6 +326,49 @@ jeter après essai sur le terrain.
 
 ---
 
+## Comparer les modèles, rejouer une journée de pluie
+
+### Le mode debug
+
+**Réglages → Mode debug → Comparer les modèles météo.** Cinq modèles Open-Meteo sur le
+trajet et le créneau courants, avec cumul, pic et probabilité maximale. Utile même par
+temps sec : c'est là qu'on voit lesquels divergent.
+
+« Enregistrer ce relèvé » ajoute une ligne à `/data/models-log.ndjson`. Une automatisation
+Home Assistant qui appelle `/api/debug/models?type=morning&log=1` une fois par jour
+constitue l'historique toute seule.
+
+### Le replay historique
+
+`tools/replay.js` teste l'app avec de **vraies** données de pluie, sans attendre qu'il
+pleuve sur le trajet. Il s'appuie sur deux API Open-Meteo supplémentaires, gratuites et
+sans clé : l'**archive ERA5** pour ce qui est réellement tombé, et l'**historical
+forecast** pour ce que chaque modèle avait prévu ce jour-là.
+
+```bash
+node tools/replay.js scan --from 2026-06-01 --to 2026-08-31
+node tools/replay.js day 2026-08-28 --at 08:30
+node tools/replay.js day 2026-08-28 --at 08:30 --fixture data/pluie.json
+```
+
+`scan` liste les journées pluvieuses **avec l'heure du pic** : une journée à 34 mm ne sert
+à rien si tout est tombé pendant qu'on était au bureau. `--at` force alors l'heure de
+départ pour viser l'averse.
+
+> ERA5 a une maille d'environ 25 km au pas horaire. Elle donne un ordre de grandeur, pas
+> le détail d'une averse de quartier : un modèle « en écart » peut avoir raison localement.
+
+### Quel modèle, et pourquoi
+
+L'app utilise `meteofrance_seamless`, qui sert AROME HD (1,5 km) sur la France et enchaîne
+sur AROME puis ARPEGE au-delà de son horizon.
+
+Le pinner directement sur `meteofrance_arome_france_hd` a été évalué et écarté : sur dix
+villes françaises et deux jours au pas de 15 minutes, les deux s'accordent sur **1917
+créneaux sur 1920**, et les trois écarts sont des créneaux où `seamless` a une donnée que
+AROME HD n'a pas. AROME HD seul s'arrête vers 48 h. Le pinner ne gagnerait rien et
+coûterait de la couverture — il reste dans la comparaison du mode debug.
+
 ## Architecture
 
 ```
@@ -340,10 +383,13 @@ velo-meteo/
 │  ├─ mock-data.js  jeu de données fictif (repli)
 │  ├─ route.js      tracé + points de passage
 │  ├─ radar.js      nuages de pluie autour du trajet (+ averse simulée)
+│  ├─ debug.js      comparaison des modèles et journal des relevés
 │  ├─ weather.js    mm/h et % par point
 │  ├─ wind.js       force, rafales, orientation relative
 │  ├─ stats.js      historique + créneaux
 │  └─ trips.js      configuration du trajet (CRUD)
+├─ tools/
+│  └─ replay.js     rejoue une journée passée : prévision contre réalité
 └─ www/
    ├─ index.html    coquille + barre d'onglets
    ├─ manifest.json PWA : nom, couleurs, icônes du raccourci
@@ -402,6 +448,8 @@ Toutes les routes renvoient `source: "live"` ou `"mock"`, et `error` quand un re
 | `PUT /api/trip/times` | Change les horaires sans recalculer l'itinéraire |
 | `PUT /api/trip/step` | Change le pas de temps. Rééchantillonne le tracé mémorisé, sans appel externe |
 | `DELETE /api/trip` | Efface le trajet, retour au mode maquette |
+| `GET /api/debug/models?type=…&log=1` | Cinq modèles côte à côte sur le trajet. `log=1` ajoute un relèvé au journal |
+| `GET /api/debug/log?limit=…` | Les derniers relèvés enregistrés |
 | `GET /api/options` | Options de l'add-on |
 | `GET /health` | `{ status, version, configured }` |
 

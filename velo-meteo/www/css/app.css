@@ -243,6 +243,15 @@ svg.chart{cursor:ew-resize;touch-action:pan-y}
 @media (prefers-color-scheme:dark){
   .slider-rate.t1,.slider-rate.t3,.slider-rate.t4{color:#0b1220}
 }
+/* Tableau de comparaison des modeles, en mode debug. */
+.dbg-wrap{overflow-x:auto}
+.dbg{width:100%;border-collapse:collapse;font-size:12px}
+.dbg th,.dbg td{padding:6px 8px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line)}
+.dbg th:first-child,.dbg td:first-child{text-align:left}
+.dbg th{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-dim);font-weight:700}
+.dbg tr.on td{font-weight:700;background:color-mix(in srgb,var(--accent) 10%,transparent)}
+.dbg tbody tr:last-child td{border-bottom:0}
+
 /* Reperes de la carte : choix d'icone par role. */
 .icon-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
 .icon-row .k{flex:1;font-size:13px;color:var(--text-dim);min-width:0}

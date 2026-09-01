@@ -67,6 +67,10 @@
     gpx: { direction: 'morning', speed: '18', file: null, busy: false, msg: null },
     field: { available: false, cells: [] },
     demoRain: localStorage.getItem('vm.demo-rain') === '1',
+    debug: localStorage.getItem('vm.debug') === '1',
+    models: null,        // dernier relevé de comparaison, mode debug
+    modelsBusy: false,
+    modelsMsg: null,
     basemap: localStorage.getItem('vm.basemap') || 'osm',
     engine: localStorage.getItem('vm.engine') || 'maison',
     // Décalage temporaire du départ, en minutes. Volontairement non persisté :
@@ -157,6 +161,10 @@
     history: function () { return get('/api/stats/history', function () { return MOCK.history(); }); },
     options: function () { return get('/api/options', function () { return MOCK.options; }); },
     trip: function () { return get('/api/trip', function () { return MOCK.trip; }); },
+    models: function (t, log) {
+      return get('/api/debug/models?type=' + t + sh() + (log ? '&log=1' : ''),
+                 function () { return null; });
+    },
     field: function (t) {
       return get('/api/radar?type=' + t + sh() + dm(),
                  function () { return { available: false, cells: [] }; });
@@ -518,6 +526,67 @@
       '</section>';
   }
 
+  /**
+   * Carte « Mode debug » : comparaison des modèles Open-Meteo sur le trajet et
+   * le créneau courants. Repliée par défaut — c'est un outil de mise au point,
+   * pas un écran d'usage.
+   */
+  function debugCard() {
+    var head = '<section class="card">' +
+      '<div class="card-pad" style="padding-bottom:4px"><div class="card-title">Mode debug</div></div>' +
+      '<div class="opt-list" role="group">' +
+        '<button class="opt" data-action="toggle-debug" aria-checked="' + state.debug + '" role="checkbox">' +
+          '<span class="mark"></span>' +
+          '<span><span class="t">Comparer les modèles météo</span>' +
+          '<span class="d">Affiche côte à côte ce que prévoient plusieurs modèles pour le même trajet et le même créneau. Utile même par temps sec : c’est là qu’on voit lesquels divergent.</span></span>' +
+        '</button>' +
+      '</div>';
+
+    if (!state.debug) return head + '</section>';
+
+    var m = state.models;
+    var body;
+
+    if (state.modelsBusy) body = '<div class="card-pad"><div class="note">Interrogation des modèles…</div></div>';
+    else if (!m) body = '<div class="card-pad"><div class="note">Aucun relevé. Un trajet doit être configuré.</div></div>';
+    else {
+      var rows = m.models.map(function (mo) {
+        var on = mo.name === m.current;
+        return '<tr' + (on ? ' class="on"' : '') + '>' +
+          '<td>' + esc(mo.name.replace('meteofrance_', 'mf ').replace(/_/g, ' ')) + (on ? ' •' : '') + '</td>' +
+          '<td>' + (mo.available ? num(mo.total_mm, 2) : '—') + '</td>' +
+          '<td>' + (mo.max_rate === null ? '—' : num(mo.max_rate)) + '</td>' +
+          '<td>' + (mo.max_prob === null ? '—' : mo.max_prob + ' %') + '</td>' +
+        '</tr>';
+      }).join('');
+
+      body = '<div class="card-pad" style="padding-top:0">' +
+        '<div class="small muted" style="margin-bottom:8px">Départ ' + esc(m.at.replace('T', ' à ')) +
+          ' · ' + m.points.length + ' points de passage</div>' +
+        '<div class="dbg-wrap"><table class="dbg">' +
+          '<thead><tr><th>modèle</th><th>cumul</th><th>pic</th><th>proba</th></tr></thead>' +
+          '<tbody>' + rows + '</tbody>' +
+        '</table></div>' +
+        '<div class="note" style="margin-top:8px">Cumul en mm sur le trajet, pic en mm/h, probabilité maximale. ' +
+        'Le point • marque le modèle utilisé par l’app. Météo-France ne publie pas de probabilité via Open-Meteo, ' +
+        'd’où les tirets.</div>' +
+      '</div>';
+    }
+
+    var msg = state.modelsMsg
+      ? '<div class="card-pad" style="padding-top:0"><div class="formmsg ' + state.modelsMsg.kind + '">' +
+        esc(state.modelsMsg.text) + '</div></div>'
+      : '';
+
+    return head + body + msg +
+      '<div class="form"><button class="btn ghost" data-action="log-models"' +
+        (state.modelsBusy ? ' disabled' : '') + '>📈 Enregistrer ce relevé</button></div>' +
+      '<div class="card-pad"><div class="note">Chaque relevé est ajouté à <code>/data/models-log.ndjson</code>. ' +
+      'Une automatisation Home Assistant qui appelle <code>/api/debug/models?type=morning&amp;log=1</code> ' +
+      'une fois par jour constitue l’historique toute seule.</div></div>' +
+    '</section>';
+  }
+
   var MARKER_ROLES = [
     { key: 'start', label: 'Départ' },
     { key: 'end', label: 'Arrivée' },
@@ -724,11 +793,12 @@
         '<section class="card">' +
           '<div class="card-pad">' +
             '<div class="card-title">État</div>' +
-            '<div class="small muted">Version 0.14.1 · ' +
+            '<div class="small muted">Version 0.15.0 · ' +
               (state.config.configured ? 'trajet réel configuré' : 'aucun trajet : données fictives') +
               (state.offline ? ' · API injoignable' : '') + '.</div>' +
           '</div>' +
         '</section>' +
+        debugCard() +
         '<div class="note">Les valeurs par défaut des adresses et horaires viennent de la configuration de l’add-on dans Home Assistant. ' +
         'Ce que tu saisis ici est enregistré dans /data et survit aux redémarrages.</div>';
     });
@@ -846,6 +916,17 @@
     if (btn.getAttribute('data-action') === 'clear-trip') clearTrip();
     if (btn.getAttribute('data-action') === 'import-gpx') importGpx();
 
+    if (btn.getAttribute('data-action') === 'toggle-debug') {
+      state.debug = !state.debug;
+      localStorage.setItem('vm.debug', state.debug ? '1' : '0');
+      state.modelsMsg = null;
+      if (state.debug && !state.models) loadModels(false);
+      else render(true);
+      return;
+    }
+
+    if (btn.getAttribute('data-action') === 'log-models') { loadModels(true); return; }
+
     if (btn.getAttribute('data-action') === 'toggle-demo-rain') {
       state.demoRain = !state.demoRain;
       localStorage.setItem('vm.demo-rain', state.demoRain ? '1' : '0');
@@ -897,6 +978,22 @@
       state.stepMsg = { kind: 'err', text: err.message || String(err) };
     }).then(function () {
       state.stepping = false;
+      render(true);
+    });
+  }
+
+  /** Interroge les modèles, et enregistre le relevé si `log` est vrai. */
+  function loadModels(log) {
+    state.modelsBusy = true;
+    state.modelsMsg = null;
+    render(true);
+
+    api.models(currentTrip(), log).then(function (m) {
+      state.models = m;
+      if (!m) state.modelsMsg = { kind: 'err', text: 'Comparaison indisponible : aucun trajet configuré ?' };
+      else if (log) state.modelsMsg = { kind: 'ok', text: m.logged ? 'Relevé enregistré dans le journal.' : 'Relevé impossible à enregistrer (accès à /data ?).' };
+    }).then(function () {
+      state.modelsBusy = false;
       render(true);
     });
   }

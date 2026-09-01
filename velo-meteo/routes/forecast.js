@@ -86,6 +86,23 @@ function dirLabel(deg) {
  */
 const MODELS = 'meteofrance_seamless,best_match';
 
+/**
+ * Modèles proposés à la comparaison en mode debug.
+ *
+ * `meteofrance_seamless` est celui de l'app. `arome_france_hd` est le même
+ * modèle sans son repli : mesuré identique à `seamless` sur 1917 créneaux
+ * comparés sur 1920, dans dix villes françaises et sur deux jours — les trois
+ * écarts étant des créneaux où `seamless` a une donnée et AROME HD n'en a pas.
+ * Les trois autres sont des modèles étrangers, utiles comme point de comparaison.
+ */
+const COMPARE_MODELS = [
+  'meteofrance_seamless',
+  'meteofrance_arome_france_hd',
+  'best_match',
+  'icon_eu',
+  'ecmwf_ifs025'
+];
+
 /** Série Météo-France, trou par trou complétée par le modèle de repli. */
 function mergeSeries(main, fallback) {
   if (!main) return fallback || [];
@@ -593,6 +610,92 @@ async function safeTripData(type, shift) {
   }
 }
 
+/**
+ * Même trajet, même créneau, plusieurs modèles côte à côte.
+ *
+ * Un seul appel : `models` accepte une liste, et la réponse suffixe alors ses
+ * champs. Pas de cache — on veut le relevé du moment, et l'appel est rare.
+ */
+async function compareModels(type, shift) {
+  const trip = store.getTrip();
+  if (!store.isConfigured(trip)) return null;
+
+  const route = trip.routes[type];
+  const hhmm = type === 'evening' ? trip.evening_time : trip.morning_time;
+
+  const qs = new URLSearchParams({
+    latitude: route.points.map(p => p.lat).join(','),
+    longitude: route.points.map(p => p.lon).join(','),
+    minutely_15: 'precipitation',
+    hourly: 'precipitation_probability',
+    models: COMPARE_MODELS.join(','),
+    timezone: 'auto',
+    forecast_days: '2'
+  });
+
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  let locs;
+  try {
+    const res = await fetch(API + '?' + qs.toString(), { signal: ctrl.signal });
+    if (!res.ok) throw new Error('Open-Meteo HTTP ' + res.status);
+    const json = await res.json();
+    locs = Array.isArray(json) ? json : [json];
+  } finally {
+    clearTimeout(timer);
+  }
+
+  const dep = nextDeparture(hhmm, locs[0].utc_offset_seconds || 0, shift);
+  const sliceH = (route.duration_min / Math.max(1, route.points.length - 1)) / 60;
+
+  const points = route.points.map(p => {
+    const at = new Date(dep.getTime() + p.offset_min * 60000);
+    return {
+      i: p.i, label: p.label, lat: p.lat, lon: p.lon,
+      time: pad(at.getUTCHours()) + ':' + pad(at.getUTCMinutes()),
+      quarter: isoLocal(at, 15),
+      hour: isoLocal(at, 60).slice(0, 13) + ':00'
+    };
+  });
+
+  const models = COMPARE_MODELS.map(name => {
+    const rates = points.map((pt, i) => {
+      const q = locs[i].minutely_15 || {};
+      const k = (q.time || []).indexOf(pt.quarter);
+      const v = k >= 0 ? q['precipitation_' + name][k] : null;
+      // Cumul sur 15 min converti en intensité, comme partout dans l'app.
+      return (v === null || v === undefined) ? null : +(v * 4).toFixed(2);
+    });
+
+    const probs = points.map((pt, i) => {
+      const h = locs[i].hourly || {};
+      const k = (h.time || []).indexOf(pt.hour);
+      const v = k >= 0 ? h['precipitation_probability_' + name][k] : null;
+      return (v === null || v === undefined) ? null : Math.round(v);
+    });
+
+    const known = rates.filter(v => v !== null);
+    return {
+      name: name,
+      available: known.length > 0,
+      rates: rates,
+      probs: probs,
+      total_mm: +known.reduce((s, v) => s + v * sliceH, 0).toFixed(2),
+      max_rate: known.length ? +Math.max.apply(null, known).toFixed(2) : null,
+      max_prob: probs.some(v => v !== null) ? Math.max.apply(null, probs.filter(v => v !== null)) : null
+    };
+  });
+
+  return {
+    type: type,
+    shift: shift || 0,
+    at: isoLocal(dep, 15),
+    current: 'meteofrance_seamless',
+    points: points.map(p => ({ i: p.i, label: p.label, time: p.time })),
+    models: models
+  };
+}
+
 /** Champ de pluie mis en cache comme le reste : l'écran d'accueil est bavard. */
 async function getField(type, shift) {
   const trip = store.getTrip();
@@ -609,5 +712,6 @@ async function getField(type, shift) {
 
 module.exports = {
   getTripData, getWindows, safeTripData, invalidate, nextDeparture, cleanShift,
-  getField, demoField, demoWeather, demoWindows
+  getField, demoField, demoWeather, demoWindows,
+  compareModels, COMPARE_MODELS
 };

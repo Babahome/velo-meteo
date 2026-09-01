@@ -47,6 +47,7 @@ app.use('/api/wind',    require('./routes/wind'));
 app.use('/api/trip',    require('./routes/trips'));
 app.use('/api/stats',   require('./routes/stats'));
 app.use('/api/radar',   require('./routes/radar'));
+app.use('/api/debug',   require('./routes/debug'));
 
 app.get('/api/options', (_req, res) => res.json(readOptions()));
 
@@ -56,7 +57,7 @@ app.use('/api', (_req, res) => res.status(404).json({ error: 'Route API inconnue
 
 app.get('/health', (_req, res) => {
   const store = require('./routes/store');
-  res.json({ status: 'ok', version: '0.14.1', configured: store.isConfigured(store.getTrip()) });
+  res.json({ status: 'ok', version: '0.15.0', configured: store.isConfigured(store.getTrip()) });
 });
 
 // --- Front statique --------------------------------------------------------

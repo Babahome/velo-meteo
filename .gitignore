@@ -9,3 +9,6 @@ Thumbs.db
 # Traces GPX personnelles : elles contiennent le trajet domicile <-> travail.
 Gpx/
 *.gpx
+
+# Donnees d'execution de l'add-on (trajet, journaux, jeux d'essai du replay).
+velo-meteo/data/
