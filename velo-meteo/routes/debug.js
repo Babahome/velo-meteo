@@ -16,6 +16,7 @@ const path   = require('path');
 const router = require('express').Router();
 const store  = require('./store');
 const forecast = require('./forecast');
+const history  = require('./history');
 
 const LOG = path.join(process.env.DATA_PATH || '/data', 'models-log.ndjson');
 const LOG_MAX = 2000;   // ~5 ans à un relevé par jour
@@ -33,6 +34,30 @@ router.get('/models', async (req, res) => {
     const data = await forecast.compareModels(type, shift);
     if (req.query.log === '1') data.logged = append(data);
     res.json(data);
+  } catch (e) {
+    res.status(502).json({ error: e.message || String(e) });
+  }
+});
+
+/**
+ * GET /api/debug/showers?days=… — les averses passées du trajet.
+ * De quoi rejouer une vraie journée de pluie en un clic, sans avoir à deviner
+ * une date ni sortir la ligne de commande.
+ */
+router.get('/showers', async (req, res) => {
+  const trip = store.getTrip();
+  if (!store.isConfigured(trip)) {
+    return res.status(404).json({ error: 'Aucun trajet configuré.' });
+  }
+
+  const days = Math.max(7, Math.min(365, parseInt(req.query.days, 10) || 120));
+  // L'archive s'arrête quelques jours avant aujourd'hui : on garde une marge.
+  const to = new Date(Date.now() - 6 * 864e5).toISOString().slice(0, 10);
+  const from = new Date(Date.now() - (days + 6) * 864e5).toISOString().slice(0, 10);
+
+  try {
+    const list = await history.showers(trip.routes.morning.points, from, to, 8);
+    res.json({ from, to, showers: list });
   } catch (e) {
     res.status(502).json({ error: e.message || String(e) });
   }

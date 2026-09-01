@@ -18,7 +18,7 @@ router.get('/', async (req, res) => {
       forecast.demoWeather(d.route, d.hhmm, shift, type)));
   }
 
-  const { data, source, error } = await forecast.safeTripData(type, shift);
+  const { data, source, error } = await forecast.safeTripData(type, shift, forecast.cleanReplay(req.query.replay));
   const body = data ? data.weather : weatherOf(type);
   res.json(Object.assign({ source, error }, body));
 });

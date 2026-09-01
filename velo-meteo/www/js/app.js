@@ -68,6 +68,10 @@
     field: { available: false, cells: [] },
     demoRain: localStorage.getItem('vm.demo-rain') === '1',
     debug: localStorage.getItem('vm.debug') === '1',
+    // Replay : "YYYY-MM-DDTHH:MM" d'une averse passée, ou vide pour le direct.
+    replay: localStorage.getItem('vm.replay') || '',
+    showers: null,
+    showersBusy: false,
     models: null,        // dernier relevé de comparaison, mode debug
     modelsBusy: false,
     modelsMsg: null,
@@ -148,7 +152,10 @@
   }
 
   /** Suffixe de décalage, ajouté à toute requête qui dépend de l'heure de départ. */
-  function sh() { return state.shift ? '&shift=' + state.shift : ''; }
+  function sh() {
+    return (state.shift ? '&shift=' + state.shift : '') +
+           (state.replay ? '&replay=' + encodeURIComponent(state.replay) : '');
+  }
 
   /** L'averse simulée vaut pour tout l'écran, pas seulement pour la carte. */
   function dm() { return state.demoRain ? '&demo=1' : ''; }
@@ -161,6 +168,7 @@
     history: function () { return get('/api/stats/history', function () { return MOCK.history(); }); },
     options: function () { return get('/api/options', function () { return MOCK.options; }); },
     trip: function () { return get('/api/trip', function () { return MOCK.trip; }); },
+    showers: function () { return get('/api/debug/showers', function () { return null; }); },
     models: function (t, log) {
       return get('/api/debug/models?type=' + t + sh() + (log ? '&log=1' : ''),
                  function () { return null; });
@@ -203,6 +211,10 @@
     }
     if (state.source === 'demo') {
       return '<div class="mockbar warn-bar">☔ Averse simulée · tout l’écran tourne sur le jeu d’essai</div>';
+    }
+    if (state.source === 'replay') {
+      return '<div class="mockbar warn-bar">🎞️ Replay du ' + esc(prettyReplay(state.replay)) +
+        ' · prévisions réellement émises ce jour-là</div>';
     }
     if (state.source === 'live') {
       return '<div class="livebar">✅ Données réelles · Open-Meteo' +
@@ -648,6 +660,54 @@
       '</section>';
   }
 
+  /** "2026-08-28T08:30" → "28/08/2026 à 08:30". */
+  function prettyReplay(v) {
+    if (!v) return '';
+    return v.slice(8, 10) + '/' + v.slice(5, 7) + '/' + v.slice(0, 4) + ' à ' + v.slice(11);
+  }
+
+  /**
+   * Carte « Rejouer une averse » : la liste des vraies averses passées du
+   * trajet, à rejouer d'un clic.
+   *
+   * L'averse simulée sert à juger le rendu ; celle-ci sert à juger l'app sur ce
+   * qui est vraiment tombé — carte, graphe, profil et verdict compris.
+   */
+  function replayCard() {
+    var head = '<section class="card">' +
+      '<div class="card-pad" style="padding-bottom:6px"><div class="card-title">Rejouer une averse passée</div></div>';
+
+    if (state.replay) {
+      head += '<div class="card-pad" style="padding-top:0">' +
+        '<div class="formmsg ok">🎞️ Replay en cours : ' + esc(prettyReplay(state.replay)) + '</div></div>';
+    }
+
+    var body;
+    if (state.showersBusy) {
+      body = '<div class="card-pad"><div class="note">Recherche des averses des quatre derniers mois…</div></div>';
+    } else if (!state.showers) {
+      body = '<div class="form"><button class="btn ghost" data-action="find-showers">🔎 Chercher les averses passées</button></div>';
+    } else if (!state.showers.length) {
+      body = '<div class="card-pad"><div class="note">Aucune journée à plus d’1 mm sur le trajet dans la période.</div></div>';
+    } else {
+      body = '<div class="opt-list" role="group">' + state.showers.map(function (s) {
+        var when = s.date + 'T' + (s.peak_hour || '12:00');
+        return '<button class="opt" data-replay="' + esc(when) + '" aria-checked="' + (state.replay === when) + '" role="radio">' +
+          '<span class="mark"></span>' +
+          '<span><span class="t">' + esc(prettyReplay(when)) + '</span>' +
+          '<span class="d">' + num(s.peak_mm) + ' mm/h au plus fort · ' + num(s.max_mm) + ' mm sur la journée</span></span>' +
+        '</button>';
+      }).join('') + '</div>';
+    }
+
+    return head + body +
+      (state.replay ? '<div class="form"><button class="btn ghost" data-replay="">↩︎ Revenir au direct</button></div>' : '') +
+      '<div class="card-pad"><div class="note">Les prévisions rejouées sont celles que les modèles avaient ' +
+      '<b>réellement émises</b> ce jour-là, pas une reconstitution. L’heure proposée est celle du pic mesuré : ' +
+      'c’est là que la carte a quelque chose à montrer.</div></div>' +
+    '</section>';
+  }
+
   /**
    * Carte « Nuages de pluie » de la page Réglages : état de la couche, et
    * interrupteur d'averse simulée. Sans lui, valider le rendu des nuages
@@ -789,11 +849,12 @@
         stepCard() +
         markersCard() +
         radarCard() +
+        replayCard() +
 
         '<section class="card">' +
           '<div class="card-pad">' +
             '<div class="card-title">État</div>' +
-            '<div class="small muted">Version 0.15.0 · ' +
+            '<div class="small muted">Version 0.16.0 · ' +
               (state.config.configured ? 'trajet réel configuré' : 'aucun trajet : données fictives') +
               (state.offline ? ' · API injoignable' : '') + '.</div>' +
           '</div>' +
@@ -870,6 +931,17 @@
       return;
     }
 
+    var rp = e.target.closest('[data-replay]');
+    if (rp) {
+      state.replay = rp.getAttribute('data-replay');
+      if (state.replay) localStorage.setItem('vm.replay', state.replay);
+      else localStorage.removeItem('vm.replay');
+      state.shift = 0;              // le décalage n'a pas de sens sur une date figée
+      UI.setShift(0);
+      render(true);
+      return;
+    }
+
     var st = e.target.closest('.opt[data-step]');
     if (st) { applyStep(st.getAttribute('data-step')); return; }
 
@@ -926,6 +998,15 @@
     }
 
     if (btn.getAttribute('data-action') === 'log-models') { loadModels(true); return; }
+
+    if (btn.getAttribute('data-action') === 'find-showers') {
+      state.showersBusy = true;
+      render(true);
+      api.showers().then(function (r) {
+        state.showers = (r && r.showers) || [];
+      }).then(function () { state.showersBusy = false; render(true); });
+      return;
+    }
 
     if (btn.getAttribute('data-action') === 'toggle-demo-rain') {
       state.demoRain = !state.demoRain;

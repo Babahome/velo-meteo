@@ -338,7 +338,29 @@ temps sec : c'est là qu'on voit lesquels divergent.
 Home Assistant qui appelle `/api/debug/models?type=morning&log=1` une fois par jour
 constitue l'historique toute seule.
 
-### Le replay historique
+### Rejouer une averse dans l'app
+
+**Réglages → Rejouer une averse passée.** Le bouton « Chercher les averses passées »
+interroge l'archive sur les quatre derniers mois et propose les journées pluvieuses du
+trajet, **la plus intense d'abord, à l'heure de son pic**. Un clic, et l'app entière
+bascule sur ce jour-là : carte des nuages, curseur, graphe, profil, verdict et créneaux.
+
+Ce sont les prévisions que les modèles avaient **réellement émises** ce jour-là, pas une
+reconstitution : le replay tape sur `historical-forecast-api.open-meteo.com`, avec les
+mêmes modèles et les mêmes paramètres que le direct. Seule l'origine du JSON change — le
+reste de l'app ne voit aucune différence.
+
+Un bandeau ambré rappelle en permanence qu'on n'est pas dans le direct, et « Revenir au
+direct » referme la parenthèse. Le décalage de départ est remis à zéro pendant un replay :
+il n'a pas de sens sur une date figée.
+
+> C'est le complément visuel de l'averse simulée : celle-ci sert à juger le rendu, le
+> replay à juger l'app sur ce qui est vraiment tombé.
+
+Toutes les routes de données acceptent `&replay=YYYY-MM-DDTHH:MM`. Une date d'aujourd'hui
+ou du futur est ignorée et rend la main au direct.
+
+### Le replay en ligne de commande
 
 `tools/replay.js` teste l'app avec de **vraies** données de pluie, sans attendre qu'il
 pleuve sur le trajet. Il s'appuie sur deux API Open-Meteo supplémentaires, gratuites et
@@ -383,7 +405,8 @@ velo-meteo/
 │  ├─ mock-data.js  jeu de données fictif (repli)
 │  ├─ route.js      tracé + points de passage
 │  ├─ radar.js      nuages de pluie autour du trajet (+ averse simulée)
-│  ├─ debug.js      comparaison des modèles et journal des relevés
+│  ├─ debug.js      comparaison des modèles, journal, averses passées
+│  ├─ history.js    averses passées du trajet dans l'archive ERA5
 │  ├─ weather.js    mm/h et % par point
 │  ├─ wind.js       force, rafales, orientation relative
 │  ├─ stats.js      historique + créneaux
@@ -441,6 +464,7 @@ Toutes les routes renvoient `source: "live"` ou `"mock"`, et `error` quand un re
 | `GET /api/wind?type=…` | Force, rafales, secteur, orientation relative au trajet |
 | `GET /api/radar?type=…&demo=1` | Nuages de pluie : grille autour du trajet, `cells` en vue d'ensemble et `frames` (une image par point de passage) pour le curseur. `demo=1` renvoie une averse fictive |
 | `GET /api/stats/windows?type=…` | 9 créneaux de départ autour de l'horaire habituel |
+| *(`&replay=YYYY-MM-DDTHH:MM`)* | Sur `route`, `weather`, `wind`, `radar` et `stats/windows` : rejoue les prévisions émises ce jour-là |
 | `GET /api/stats/history` | 21 jours de trajets secs / mouillés (fictif) |
 | `GET /api/trip` | Trajet configuré, ou `{ configured: false }` |
 | `POST /api/trip` | Géocode et calcule les itinéraires. Corps : `home_address`, `work_address`, `morning_time`, `evening_time` |
@@ -450,6 +474,7 @@ Toutes les routes renvoient `source: "live"` ou `"mock"`, et `error` quand un re
 | `DELETE /api/trip` | Efface le trajet, retour au mode maquette |
 | `GET /api/debug/models?type=…&log=1` | Cinq modèles côte à côte sur le trajet. `log=1` ajoute un relèvé au journal |
 | `GET /api/debug/log?limit=…` | Les derniers relèvés enregistrés |
+| `GET /api/debug/showers?days=…` | Les averses passées du trajet, la plus intense d'abord, avec l'heure du pic |
 | `GET /api/options` | Options de l'add-on |
 | `GET /health` | `{ status, version, configured }` |
 

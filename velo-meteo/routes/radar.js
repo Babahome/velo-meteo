@@ -28,6 +28,7 @@ router.get('/', async (req, res) => {
   const type = req.query.type === 'evening' ? 'evening' : 'morning';
   const demo = req.query.demo === '1';
   const shift = forecast.cleanShift(req.query.shift);
+  const replay = forecast.cleanReplay(req.query.replay);
 
   // Le mode démo doit marcher aussi sans trajet configuré : c'est justement
   // là qu'on regarde le rendu avant d'avoir renseigné quoi que ce soit.
@@ -40,9 +41,9 @@ router.get('/', async (req, res) => {
   }
 
   try {
-    const field = await forecast.getField(type, shift);
+    const field = await forecast.getField(type, shift, replay);
     if (!field) return res.json({ available: false, source: 'mock', error: null, cells: [] });
-    res.json(Object.assign({ available: true, source: 'open-meteo', error: null }, field));
+    res.json(Object.assign({ available: true, source: replay ? 'replay' : 'open-meteo', error: null }, field));
   } catch (e) {
     // Pas de champ de pluie n'est pas une erreur : la carte s'affiche sans.
     res.json({ available: false, source: 'open-meteo', error: e.message || String(e), cells: [] });

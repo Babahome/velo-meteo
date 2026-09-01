@@ -15,6 +15,30 @@ const store = require('./store');
 const geo   = require('./geo');
 
 const API = 'https://api.open-meteo.com/v1/forecast';
+
+/**
+ * Même API, mêmes modèles, mêmes paramètres — mais sur une date passée.
+ * C'est ce qui permet de faire tourner l'app *entière* sur une vraie averse
+ * d'il y a trois jours : la carte, le graphe et le verdict ne voient aucune
+ * différence, seule la source du JSON change.
+ */
+const REPLAY_API = 'https://historical-forecast-api.open-meteo.com/v1/forecast';
+
+/** "YYYY-MM-DDTHH:MM" d'une date passée, ou null. */
+function cleanReplay(v) {
+  const m = /^(\d{4}-\d{2}-\d{2})T([01]\d|2[0-3]):([0-5]\d)$/.exec(String(v || ''));
+  if (!m) return null;
+  // L'archive s'arrête quelques jours avant aujourd'hui ; au-delà c'est le live
+  // qui répond, et rejouer « demain » n'aurait aucun sens.
+  if (new Date(m[1] + 'T12:00:00Z').getTime() > Date.now() - 24 * 3600 * 1000) return null;
+  return m[0];
+}
+
+/** Le départ, en repère « heure locale lue comme de l'UTC », comme partout ici. */
+function replayDeparture(replay) {
+  return new Date(Date.UTC(+replay.slice(0, 4), +replay.slice(5, 7) - 1, +replay.slice(8, 10),
+                           +replay.slice(11, 13), +replay.slice(14, 16)));
+}
 const TIMEOUT_MS = 15000;
 const CACHE_MS = 5 * 60 * 1000;
 
@@ -128,22 +152,32 @@ function normalize(loc) {
   return loc;
 }
 
-async function fetchForecast(points) {
-  const qs = new URLSearchParams({
+async function fetchForecast(points, replay) {
+  const params = {
     latitude: points.map(p => p.lat).join(','),
     longitude: points.map(p => p.lon).join(','),
     minutely_15: 'precipitation,wind_speed_10m,wind_direction_10m,wind_gusts_10m,apparent_temperature',
     hourly: 'precipitation_probability',
     models: MODELS,
     timezone: 'auto',
-    forecast_days: '2',
     wind_speed_unit: 'kmh'
-  });
+  };
 
+  // En replay on demande la journée visée plutôt qu'une fenêtre à partir de
+  // maintenant ; on prend aussi le lendemain, un trajet du soir pouvant mordre
+  // dessus.
+  if (replay) {
+    params.start_date = replay.slice(0, 10);
+    params.end_date = nextDay(replay.slice(0, 10));
+  } else {
+    params.forecast_days = '2';
+  }
+
+  const qs = new URLSearchParams(params);
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   try {
-    const res = await fetch(API + '?' + qs.toString(), { signal: ctrl.signal });
+    const res = await fetch((replay ? REPLAY_API : API) + '?' + qs.toString(), { signal: ctrl.signal });
     if (!res.ok) throw new Error('Open-Meteo HTTP ' + res.status);
     const json = await res.json();
     const locs = Array.isArray(json) ? json : [json];
@@ -154,18 +188,24 @@ async function fetchForecast(points) {
   }
 }
 
+function nextDay(d) {
+  const t = new Date(d + 'T12:00:00Z');
+  t.setUTCDate(t.getUTCDate() + 1);
+  return t.toISOString().slice(0, 10);
+}
+
 /* ---------- assemblage ---------- */
 
-async function compute(type, shift) {
+async function compute(type, shift, replay) {
   const trip = store.getTrip();
   if (!store.isConfigured(trip)) return null;
 
   const route = trip.routes[type];
   const hhmm  = type === 'evening' ? trip.evening_time : trip.morning_time;
-  const locs  = await fetchForecast(route.points);
+  const locs  = await fetchForecast(route.points, replay);
 
   const offset = locs[0].utc_offset_seconds || 0;
-  const dep    = nextDeparture(hhmm, offset, shift);
+  const dep    = replay ? replayDeparture(replay) : nextDeparture(hhmm, offset, shift);
 
   const points = route.points.map((p, i) => {
     const loc = locs[i];
@@ -227,6 +267,7 @@ async function compute(type, shift) {
       departure: pad(dep.getUTCHours()) + ':' + pad(dep.getUTCMinutes()),
       departure_usual: hhmm,
       shift_min: shift || 0,
+      replay: replay || null,
       duration_min: route.duration_min,
       distance_km: route.distance_km,
       points: route.points.map(p => ({ i: p.i, time: points[p.i].time, label: p.label, lat: p.lat, lon: p.lon, x: p.x, y: p.y })),
@@ -242,7 +283,8 @@ async function compute(type, shift) {
       max_prob: max_prob,
       peak: { time: peak.time, label: peak.label, rate: peak.rate, mm: peak.mm, prob: peak.prob },
       temp_c: temps.length ? Math.round(mean(temps)) : null,
-      for_date: isoLocal(dep, 15).slice(0, 10)
+      for_date: isoLocal(dep, 15).slice(0, 10),
+      replay: replay || null
     },
     wind: {
       type: type, speed_kmh: speed, gust_kmh: gust,
@@ -252,15 +294,15 @@ async function compute(type, shift) {
 }
 
 /** Renvoie les données réelles, ou null si aucun trajet n'est configuré. */
-async function getTripData(type, shift) {
+async function getTripData(type, shift, replay) {
   const trip = store.getTrip();
   if (!store.isConfigured(trip)) return null;
 
-  const key = type + '|' + (shift || 0) + '|' + (trip.updated_at || '');
+  const key = type + '|' + (shift || 0) + '|' + (replay || '') + '|' + (trip.updated_at || '');
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.data;
 
-  const data = await compute(type, shift);
+  const data = await compute(type, shift, replay);
   cache.set(key, { at: Date.now(), data: data });
   return data;
 }
@@ -271,15 +313,15 @@ function invalidate() { cache.clear(); }
  * Créneaux de départ alternatifs : on décale l'heure de départ et on recalcule
  * ce que ça donnerait, à partir de la même prévision.
  */
-async function getWindows(type, stepMin, count) {
+async function getWindows(type, stepMin, count, replay) {
   const trip = store.getTrip();
   if (!store.isConfigured(trip)) return null;
 
   const route  = trip.routes[type];
   const hhmm   = type === 'evening' ? trip.evening_time : trip.morning_time;
-  const locs   = await fetchForecast(route.points);
+  const locs   = await fetchForecast(route.points, replay);
   const offset = locs[0].utc_offset_seconds || 0;
-  const base   = nextDeparture(hhmm, offset);
+  const base   = replay ? replayDeparture(replay) : nextDeparture(hhmm, offset);
 
   const step = stepMin || 15;
   const n    = count || 8;
@@ -400,10 +442,11 @@ const GRID_MAX_SIDE = 7;    // 49 points au maximum dans la requête Open-Meteo
  * contient toutes, et le curseur de la carte peut alors passer de l'une à
  * l'autre sans aller-retour réseau. `cells` reste la vue d'ensemble.
  */
-async function computeField(route, hhmm, shift) {
+async function computeField(route, hhmm, shift, replay) {
   const grid = buildGrid(route.points, GRID_STEP_M, GRID_MAX_SIDE);
-  const locs = await fetchForecast(grid.cells);
-  const dep = nextDeparture(hhmm, locs[0].utc_offset_seconds || 0, shift);
+  const locs = await fetchForecast(grid.cells, replay);
+  const dep = replay ? replayDeparture(replay)
+                     : nextDeparture(hhmm, locs[0].utc_offset_seconds || 0, shift);
 
   // precipitation est un cumul sur 15 min : ×4 pour une intensité en mm/h.
   // null quand le créneau n'existe pas dans la réponse : « pas de donnée » et
@@ -600,11 +643,12 @@ function demoWindows(route, hhmm, shift, stepMin, count) {
  * externe est indisponible, on retombe sur la maquette plutôt que de casser
  * l'écran — avec la raison, affichée dans l'interface.
  */
-async function safeTripData(type, shift) {
+async function safeTripData(type, shift, replay) {
   const trip = store.getTrip();
   if (!store.isConfigured(trip)) return { data: null, source: 'mock', error: null };
   try {
-    return { data: await getTripData(type, shift), source: 'live', error: null };
+    return { data: await getTripData(type, shift, replay),
+             source: replay ? 'replay' : 'live', error: null };
   } catch (e) {
     return { data: null, source: 'mock', error: e.message || String(e) };
   }
@@ -697,21 +741,22 @@ async function compareModels(type, shift) {
 }
 
 /** Champ de pluie mis en cache comme le reste : l'écran d'accueil est bavard. */
-async function getField(type, shift) {
+async function getField(type, shift, replay) {
   const trip = store.getTrip();
   if (!store.isConfigured(trip)) return null;
 
-  const key = 'field|' + type + '|' + (shift || 0) + '|' + (trip.updated_at || '');
+  const key = 'field|' + type + '|' + (shift || 0) + '|' + (replay || '') + '|' + (trip.updated_at || '');
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.data;
 
-  const data = await computeField(trip.routes[type], type === 'evening' ? trip.evening_time : trip.morning_time, shift);
+  const data = await computeField(trip.routes[type],
+    type === 'evening' ? trip.evening_time : trip.morning_time, shift, replay);
   cache.set(key, { at: Date.now(), data: data });
   return data;
 }
 
 module.exports = {
-  getTripData, getWindows, safeTripData, invalidate, nextDeparture, cleanShift,
+  getTripData, getWindows, safeTripData, invalidate, nextDeparture, cleanShift, cleanReplay,
   getField, demoField, demoWeather, demoWindows,
   compareModels, COMPARE_MODELS
 };

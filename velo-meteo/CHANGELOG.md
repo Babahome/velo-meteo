@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.16.0 — Rejouer une vraie averse, à l'écran
+
+- **Le replay est passé de la ligne de commande à l'app.** `tools/replay.js` disait si un
+  modèle avait eu raison ; il ne montrait rien. On peut maintenant *voir* une averse
+  passée s'afficher : carte des nuages, curseur, graphe, profil, verdict et créneaux
+  rejouent la journée choisie.
+- **Réglages → Rejouer une averse passée.** « Chercher les averses passées » propose les
+  journées pluvieuses des quatre derniers mois, **la plus intense d'abord, à l'heure de
+  son pic** — c'est là que la carte a quelque chose à montrer. Un clic suffit.
+- Les prévisions rejouées sont celles **réellement émises** ce jour-là : mêmes modèles,
+  mêmes paramètres, seule l'API change (`historical-forecast-api`). Le reste de l'app ne
+  voit aucune différence.
+- Un bandeau ambré rappelle qu'on n'est pas dans le direct ; « Revenir au direct » referme
+  la parenthèse. Le décalage de départ est remis à zéro : il n'a pas de sens sur une date
+  figée.
+- Une date d'aujourd'hui ou du futur est ignorée et rend la main au direct, plutôt que de
+  faire échouer l'appel.
+
 ## 0.15.0 — Comparer les modèles, rejouer une vraie journée de pluie
 
 - **Mode debug** (Réglages) : cinq modèles Open-Meteo côte à côte sur le trajet et le

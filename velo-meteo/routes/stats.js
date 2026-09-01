@@ -38,9 +38,10 @@ router.get('/windows', async (req, res) => {
   }
 
   if (store.isConfigured(store.getTrip())) {
+    const replay = forecast.cleanReplay(req.query.replay);
     try {
-      const live = await forecast.getWindows(type, 15, 9);
-      if (live) return res.json(Object.assign({ source: 'live', error: null }, live));
+      const live = await forecast.getWindows(type, 15, 9, replay);
+      if (live) return res.json(Object.assign({ source: replay ? 'replay' : 'live', error: null }, live));
     } catch (e) {
       return res.json({ source: 'mock', error: e.message || String(e), type, windows: WINDOWS[type] });
     }

@@ -4,7 +4,7 @@ Météo (pluie, vent) sur le trajet vélotaf du matin et du soir.
 
 | Add-on | Version | Port | État |
 |---|---|---|---|
-| [`velo-meteo`](velo-meteo/) | 0.15.0 | 8100 | Comparaison de modèles, replay historique |
+| [`velo-meteo`](velo-meteo/) | 0.16.0 | 8100 | Rejouer une vraie averse passée dans l’app |
 
 Renseigne ton domicile, ton lieu de travail et tes horaires dans l'onglet Réglages :
 l'add-on géocode les adresses, calcule ton itinéraire vélo réel et affiche les prévisions
