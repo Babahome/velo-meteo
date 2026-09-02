@@ -50,7 +50,8 @@
   }
 
   var state = {
-    trip: null,          // 'morning' | 'evening' (null = auto selon l'heure)
+    // 'morning' | 'evening' | 'now' (départ immédiat) ; null = auto sur l'heure
+    trip: null,
     layout: initialLayout(),
     options: null,
     config: { configured: false, trip: null },
@@ -110,6 +111,7 @@
    * Sans trajet configuré, on garde la bascule à 13 h du mode maquette.
    */
   function currentTrip() {
+    if (state.trip === 'now') return nowDirection();
     if (state.trip) return state.trip;   // bascule manuelle : elle prime
 
     var t = state.config && state.config.trip;
@@ -127,6 +129,33 @@
     if (mins <= endM) return 'morning';
     if (mins <= endE) return 'evening';
     return 'morning';   // la journée est faite : place à demain matin
+  }
+
+  /** Le bouton « Maintenant » est-il actif ? */
+  function isNow() { return state.trip === 'now'; }
+
+  /**
+   * Direction d'un départ immédiat : celle dont l'horaire habituel est le plus
+   * proche de l'heure qu'il est, dans un sens ou dans l'autre.
+   *
+   * Ce n'est pas la même question que « quel est le prochain trajet » : à 22 h
+   * le prochain est l'aller de demain matin, mais si on part *maintenant*,
+   * c'est évidemment vers la maison. On mesure donc un écart circulaire à
+   * l'horaire de chaque sens, et le plus proche gagne.
+   */
+  function nowDirection() {
+    var t = state.config && state.config.trip;
+    var mins = new Date().getHours() * 60 + new Date().getMinutes();
+    if (!t) return mins < 13 * 60 ? 'morning' : 'evening';
+
+    var startM = hhmmToMin(t.morning_time), startE = hhmmToMin(t.evening_time);
+    if (startM === null || startE === null) return mins < 13 * 60 ? 'morning' : 'evening';
+
+    var gap = function (start) {
+      var d = Math.abs(mins - start);
+      return Math.min(d, 1440 - d);
+    };
+    return gap(startM) <= gap(startE) ? 'morning' : 'evening';
   }
 
   /* ---------- accès données (API puis repli local) ---------- */
@@ -154,7 +183,8 @@
   /** Suffixe de décalage, ajouté à toute requête qui dépend de l'heure de départ. */
   function sh() {
     return (state.shift ? '&shift=' + state.shift : '') +
-           (state.replay ? '&replay=' + encodeURIComponent(state.replay) : '');
+           (state.replay ? '&replay=' + encodeURIComponent(state.replay) : '') +
+           (isNow() ? '&now=1' : '');
   }
 
   /** L'averse simulée vaut pour tout l'écran, pas seulement pour la carte. */
@@ -241,7 +271,7 @@
 
   function setSwitch(show) {
     topbar.classList.toggle('no-switch', !show);
-    var t = currentTrip();
+    var t = isNow() ? 'now' : currentTrip();
     Array.prototype.forEach.call(d.querySelectorAll('#trip-switch button'), function (b) {
       b.setAttribute('aria-selected', b.getAttribute('data-trip') === t ? 'true' : 'false');
     });
@@ -372,12 +402,15 @@
       var usual = slots.filter(function (s) { return s.is_usual; })[0] ||
                   slots.filter(function (s) { return s.time === route.departure; })[0];
 
+      var ref = payload.departure_now ? 'qu’un départ immédiat' : 'que d’habitude';
       var delta = '';
       if (usual) {
         var dm = diffMin(usual.time, best.time);
         delta = dm === 0
-          ? 'C’est déjà ton horaire habituel : rien à changer.'
-          : 'Soit ' + Math.abs(dm) + ' min ' + (dm > 0 ? 'plus tard' : 'plus tôt') + ' que d’habitude.';
+          ? (payload.departure_now
+              ? 'C’est le moment : pars maintenant.'
+              : 'C’est déjà ton horaire habituel : rien à changer.')
+          : 'Soit ' + Math.abs(dm) + ' min ' + (dm > 0 ? 'plus tard' : 'plus tôt') + ' ' + ref + '.';
       }
 
       var rows = slots.map(function (s) {
@@ -388,7 +421,7 @@
           '<div>' +
             '<div class="bar"><i style="width:' + Math.max(2, s.score) + '%;background:' + color + '"></i></div>' +
             '<div class="slot-meta">' + num(s.mm, 2) + ' mm · ' + s.prob_max + ' % · vent ' + s.wind_kmh + ' km/h' +
-              (isUsual ? ' · <b>ton horaire</b>' : '') + '</div>' +
+              (isUsual ? ' · <b>' + (payload.departure_now ? 'maintenant' : 'ton horaire') + '</b>' : '') + '</div>' +
           '</div>' +
           '<span class="pill ' + s.verdict + '">' + (s.verdict === 'sec' ? 'sec' : s.verdict === 'risque' ? 'risqué' : 'pluie') + '</span>' +
         '</div>';
@@ -854,7 +887,7 @@
         '<section class="card">' +
           '<div class="card-pad">' +
             '<div class="card-title">État</div>' +
-            '<div class="small muted">Version 0.16.0 · ' +
+            '<div class="small muted">Version 0.17.0 · ' +
               (state.config.configured ? 'trajet réel configuré' : 'aucun trajet : données fictives') +
               (state.offline ? ' · API injoignable' : '') + '.</div>' +
           '</div>' +
@@ -895,6 +928,11 @@
     var b = e.target.closest('button[data-trip]');
     if (!b) return;
     state.trip = b.getAttribute('data-trip');
+    // « Maintenant », c'est le présent : sortir d'un rejeu va de soi.
+    if (isNow() && state.replay) {
+      state.replay = '';
+      localStorage.removeItem('vm.replay');
+    }
     render();
   });
 

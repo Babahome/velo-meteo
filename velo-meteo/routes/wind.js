@@ -7,7 +7,8 @@ const forecast  = require('./forecast');
 // GET /api/wind?type=morning|evening
 router.get('/', async (req, res) => {
   const type = req.query.type === 'evening' ? 'evening' : 'morning';
-  const { data, source, error } = await forecast.safeTripData(type, forecast.cleanShift(req.query.shift), forecast.cleanReplay(req.query.replay));
+  const { data, source, error } = await forecast.safeTripData(type, forecast.cleanShift(req.query.shift),
+    forecast.cleanReplay(req.query.replay), forecast.cleanNow(req.query.now));
   const body = data ? data.wind : Object.assign({ type }, TRIPS[type].wind);
   res.json(Object.assign({ source, error }, body));
 });

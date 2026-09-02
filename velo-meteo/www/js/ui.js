@@ -1241,12 +1241,22 @@
 
   /* ---------- carte résumé du trajet ---------- */
 
+  /**
+   * Sous-titre du résumé : l'horaire *enregistré*, sauf en départ immédiat où
+   * c'est l'heure réelle qui compte. Un décalage déplace `departure` sans
+   * toucher à l'habitude, les deux ne se confondent donc pas.
+   */
+  function departureLine(route) {
+    if (route.departure_now) return 'Départ maintenant · ' + route.departure;
+    return 'Départ habituel ' + (route.departure_usual || route.departure);
+  }
+
   function routeSummary(route) {
     return '' +
       '<section class="card row" style="border-bottom:0">' +
         '<div>' +
           '<div style="font-weight:700">' + esc(route.name) + '</div>' +
-          '<div class="small muted">Départ habituel ' + route.departure + '</div>' +
+          '<div class="small muted">' + departureLine(route) + '</div>' +
         '</div>' +
         '<div class="v">' + route.distance_km.toFixed(1).replace('.', ',') + ' km · ' + route.duration_min + ' min</div>' +
       '</section>';

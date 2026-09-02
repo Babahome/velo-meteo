@@ -64,11 +64,12 @@ h1,h2,h3{margin:0}
   background:var(--surface);border:1px solid var(--line);font-size:18px
 }
 .segmented{
-  display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:10px;
+  display:grid;grid-template-columns:1fr 1.25fr 1fr;gap:4px;margin-top:10px;
   background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:4px
 }
 .segmented button{
-  padding:9px 0;border-radius:9px;font-weight:600;font-size:14px;color:var(--text-dim)
+  padding:9px 2px;border-radius:9px;font-weight:600;font-size:14px;color:var(--text-dim);
+  white-space:nowrap
 }
 .segmented button[aria-selected="true"]{background:var(--surface);color:var(--text);box-shadow:var(--shadow)}
 .topbar.no-switch .segmented{display:none}

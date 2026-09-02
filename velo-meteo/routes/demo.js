@@ -9,15 +9,33 @@
 const store = require('./store');
 const { TRIPS } = require('./mock-data');
 
-function demoContext(type) {
-  const trip = store.getTrip();
-  if (store.isConfigured(trip)) {
-    return {
-      route: trip.routes[type],
-      hhmm: type === 'evening' ? trip.evening_time : trip.morning_time
-    };
-  }
-  return { route: TRIPS[type], hhmm: TRIPS[type].departure };
+/**
+ * "HH:MM" du prochain top de 5 minutes, en heure locale du serveur.
+ *
+ * Le mode démo raisonne en minutes depuis minuit, sans appel réseau : il n'a
+ * pas le décalage horaire que renvoie Open-Meteo, et se contente donc de
+ * l'horloge de la machine. C'est exact pour un add-on qui tourne chez soi.
+ */
+function nowHHMM() {
+  const t = new Date(Math.ceil(Date.now() / 3e5) * 3e5);
+  return String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0');
 }
 
-module.exports = { demoContext };
+/**
+ * `now` demande un départ immédiat : l'averse simulée se pose alors sur
+ * l'heure qu'il est, pour que le curseur affiche les mêmes horaires que le
+ * trajet réel affiché à côté.
+ */
+function demoContext(type, now) {
+  const trip = store.getTrip();
+  const usual = store.isConfigured(trip)
+    ? (type === 'evening' ? trip.evening_time : trip.morning_time)
+    : TRIPS[type].departure;
+
+  return {
+    route: store.isConfigured(trip) ? trip.routes[type] : TRIPS[type],
+    hhmm: now ? nowHHMM() : usual
+  };
+}
+
+module.exports = { demoContext, nowHHMM };

@@ -31,16 +31,18 @@ router.get('/windows', async (req, res) => {
   // Sur le jeu d'essai, l'averse traverse le secteur en une heure : les créneaux
   // se classent donc vraiment, au lieu d'afficher une liste figée.
   if (req.query.demo === '1') {
-    const d = demoContext(type);
+    const now = forecast.cleanNow(req.query.now);
+    const d = demoContext(type, now);
     const shift = forecast.cleanShift(req.query.shift);
     const w = forecast.demoWindows(d.route, d.hhmm, shift, 15, 9);
-    return res.json({ source: 'demo', error: null, type, windows: w.windows, usual: w.usual });
+    return res.json({ source: 'demo', error: null, type, windows: w.windows, usual: w.usual, departure_now: now });
   }
 
   if (store.isConfigured(store.getTrip())) {
     const replay = forecast.cleanReplay(req.query.replay);
+    const now = forecast.cleanNow(req.query.now);
     try {
-      const live = await forecast.getWindows(type, 15, 9, replay);
+      const live = await forecast.getWindows(type, 15, 9, replay, now);
       if (live) return res.json(Object.assign({ source: replay ? 'replay' : 'live', error: null }, live));
     } catch (e) {
       return res.json({ source: 'mock', error: e.message || String(e), type, windows: WINDOWS[type] });

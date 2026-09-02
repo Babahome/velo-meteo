@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.17.0 — Maintenant
+
+- **Un troisième bouton, entre Matin et Soir** : le trajet en partant *à l'instant*, pour
+  les départs en décalé — pause déjeuner, départ anticipé, sortie improvisée.
+- **Le sens est déduit de l'heure** : celui des deux trajets dont l'horaire habituel est
+  le plus proche, dans un sens ou dans l'autre. Ce n'est volontairement pas la règle du
+  « prochain trajet » : à 22 h le prochain est l'aller de demain matin, mais si on part
+  maintenant, c'est vers la maison.
+- Le départ est arrondi au **prochain top de 5 minutes** : jamais dans le passé — le temps
+  de sortir le vélo — et une réponse réutilisable pendant cinq minutes.
+- Tout suit : carte, curseur, graphe, verdict, et les créneaux, qui se recentrent sur
+  l'heure courante. Le décalage ±10 min continue de s'appliquer par-dessus.
+- L'averse simulée se pose elle aussi sur l'heure courante, sans quoi le jeu d'essai aurait
+  affiché les horaires habituels à côté d'un trajet en départ immédiat.
+- Choisir « Maintenant » pendant un rejeu en sort : les deux se contredisent.
+- **Corrigé au passage** : le résumé du trajet annonçait « Départ habituel » en affichant
+  l'heure *décalée*. Il lit maintenant l'horaire enregistré, et dit « Départ maintenant »
+  quand c'en est un.
+
 ## 0.16.0 — Rejouer une vraie averse, à l'écran
 
 - **Le replay est passé de la ligne de commande à l'app.** `tools/replay.js` disait si un

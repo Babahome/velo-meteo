@@ -29,11 +29,12 @@ router.get('/', async (req, res) => {
   const demo = req.query.demo === '1';
   const shift = forecast.cleanShift(req.query.shift);
   const replay = forecast.cleanReplay(req.query.replay);
+  const now = forecast.cleanNow(req.query.now);
 
   // Le mode démo doit marcher aussi sans trajet configuré : c'est justement
   // là qu'on regarde le rendu avant d'avoir renseigné quoi que ce soit.
   if (demo) {
-    const d = demoContext(type);
+    const d = demoContext(type, now);
     // Le décalage vaut aussi pour l'averse simulée : sans ça, les horaires du
     // curseur mentiraient dès qu'on touche aux boutons ±10 min.
     const field = forecast.demoField(d.route, d.hhmm, shift);
@@ -41,7 +42,7 @@ router.get('/', async (req, res) => {
   }
 
   try {
-    const field = await forecast.getField(type, shift, replay);
+    const field = await forecast.getField(type, shift, replay, now);
     if (!field) return res.json({ available: false, source: 'mock', error: null, cells: [] });
     res.json(Object.assign({ available: true, source: replay ? 'replay' : 'open-meteo', error: null }, field));
   } catch (e) {

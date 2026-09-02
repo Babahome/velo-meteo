@@ -119,7 +119,7 @@ formulaire ; ce qui est saisi dans l'app prend le dessus et survit aux redémarr
 
 | Onglet | Contenu |
 |---|---|
-| **Aujourd'hui** | Le **prochain trajet à venir**, déduit des horaires enregistrés ; commutable à la main. |
+| **Aujourd'hui** | Le **prochain trajet à venir**, déduit des horaires enregistrés ; commutable à la main, ou « Maintenant » pour un départ immédiat. |
 | **Créneaux** | Les départs possibles autour de l'heure habituelle, classés par score. |
 | **Historique** | Trois semaines de trajets secs / mouillés — **encore fictif**. |
 | **Réglages** | Trajet, horaires, variante de layout. |
@@ -189,6 +189,26 @@ Celui qui vient. Tant que le trajet du matin n'est pas **terminé**, c'est lui ;
 du soir ; une fois le soir passé, c'est le matin du lendemain, et la prévision bascule sur
 demain toute seule. On raisonne sur la fin du trajet et non sur le départ : ouvrir l'app
 en roulant montre le trajet en cours. La bascule manuelle Matin / Soir prime toujours.
+
+### Maintenant
+
+Le bouton du milieu, entre **Matin** et **Soir** : le trajet en partant **à l'instant**,
+et non à l'horaire enregistré. Utile quand on part en décalé — pause déjeuner, départ
+anticipé, sortie improvisée.
+
+Le départ est arrondi au **prochain top de 5 minutes** : il ne tombe jamais dans le passé
+— le temps de sortir le vélo — et la même réponse sert pendant cinq minutes au lieu de
+changer à chaque seconde.
+
+**Le sens est déduit de l'heure** : celui des deux trajets dont l'horaire habituel est le
+plus proche de maintenant, dans un sens ou dans l'autre. Ce n'est pas la même question que
+« quel est le prochain trajet » : à 22 h le prochain est l'aller de demain matin, mais si
+on part *maintenant*, c'est évidemment vers la maison.
+
+Tout suit : la carte, le curseur, le graphe, le verdict, et les créneaux, qui se recentrent
+sur l'heure courante au lieu de l'horaire habituel. Le décalage ±10 min continue de
+fonctionner par-dessus. Choisir « Maintenant » pendant un rejeu en sort : les deux se
+contredisent.
 
 ### Les repères
 
@@ -405,6 +425,7 @@ velo-meteo/
 │  ├─ mock-data.js  jeu de données fictif (repli)
 │  ├─ route.js      tracé + points de passage
 │  ├─ radar.js      nuages de pluie autour du trajet (+ averse simulée)
+│  ├─ demo.js       contexte de l'averse simulée (trajet et heure)
 │  ├─ debug.js      comparaison des modèles, journal, averses passées
 │  ├─ history.js    averses passées du trajet dans l'archive ERA5
 │  ├─ weather.js    mm/h et % par point
@@ -465,6 +486,7 @@ Toutes les routes renvoient `source: "live"` ou `"mock"`, et `error` quand un re
 | `GET /api/radar?type=…&demo=1` | Nuages de pluie : grille autour du trajet, `cells` en vue d'ensemble et `frames` (une image par point de passage) pour le curseur. `demo=1` renvoie une averse fictive |
 | `GET /api/stats/windows?type=…` | 9 créneaux de départ autour de l'horaire habituel |
 | *(`&replay=YYYY-MM-DDTHH:MM`)* | Sur `route`, `weather`, `wind`, `radar` et `stats/windows` : rejoue les prévisions émises ce jour-là |
+| *(`&now=1`)* | Sur les mêmes routes : départ à l'instant plutôt qu'à l'horaire enregistré. Le rejeu, s'il est présent, l'emporte |
 | `GET /api/stats/history` | 21 jours de trajets secs / mouillés (fictif) |
 | `GET /api/trip` | Trajet configuré, ou `{ configured: false }` |
 | `POST /api/trip` | Géocode et calcule les itinéraires. Corps : `home_address`, `work_address`, `morning_time`, `evening_time` |
