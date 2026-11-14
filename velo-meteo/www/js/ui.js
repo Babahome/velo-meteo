@@ -57,6 +57,16 @@
 
   /* ---------- bloc verdict ---------- */
 
+  /**
+   * Sous-titre de la pastille de température : « ressenti 9° » quand l'écart se
+   * sent, sinon le simple mot. Deux degrés d'écart, c'est une couche de plus.
+   */
+  function tempLabel(real, feels) {
+    if (real === null || real === undefined) return 'température';
+    if (feels === null || feels === undefined || Math.abs(feels - real) < 2) return 'température';
+    return 'ressenti ' + feels + '°';
+  }
+
   function verdictCard(weather, v, compact) {
     return '' +
       '<section class="verdict ' + v.key + (compact ? ' compact' : '') + '">' +
@@ -70,7 +80,8 @@
         '<div class="verdict-stats">' +
           '<div class="stat"><b>' + num(weather.total_mm) + '</b><span>cumul mm</span></div>' +
           '<div class="stat"><b>' + weather.max_prob + ' %</b><span>proba max</span></div>' +
-          '<div class="stat"><b>' + (weather.temp_c === null ? '—' : weather.temp_c + '°') + '</b><span>ressenti</span></div>' +
+          '<div class="stat"><b>' + (weather.temp_c === null ? '—' : weather.temp_c + '°') + '</b>' +
+            '<span>' + tempLabel(weather.temp_c, weather.feels_c) + '</span></div>' +
         '</div>' +
       '</section>';
   }
@@ -196,6 +207,30 @@
       dots += '<circle cx="' + cx.toFixed(1) + '" cy="' + py.toFixed(1) + '" r="' + (on ? 4.6 : 2.6) +
         '" fill="var(--accent)"' + (on ? ' stroke="var(--surface)" stroke-width="2"' : '') + '/>';
 
+      // Le point choisi écrit sa probabilité à côté de son rond. L'intensité est
+      // déjà au-dessus de sa barre : les deux chiffres du point regardé se
+      // lisent alors sans avoir à viser l'axe de droite.
+      if (on) {
+        var ptxt = p.prob + ' %';
+        // Du côté de la barre voisine la plus basse : c'est là qu'il y a le
+        // moins de chances de passer devant sa valeur.
+        var lh = i > 0 ? pts[i - 1].rate : -1;
+        var rh = i < pts.length - 1 ? pts[i + 1].rate : -1;
+        var right = i === pts.length - 1 ? true : (i === 0 ? false : lh <= rh);
+        var tx = cx + (right ? -8 : 8);
+        var ty = py < T + 16 ? py + 14 : py - 9;
+        // Pastille sous le texte : à hauteur de courbe, l'étiquette passe
+        // souvent devant la valeur de la barre voisine.
+        var tw = ptxt.length * valueSize * 0.6 + 8;
+        var th = valueSize + 5;
+        dots += '<rect x="' + (right ? tx - tw : tx).toFixed(1) + '" y="' + (ty - th + 4).toFixed(1) +
+            '" width="' + tw.toFixed(1) + '" height="' + th + '" rx="' + (th / 2).toFixed(1) +
+            '" fill="var(--surface)" opacity=".88"/>' +
+          '<text x="' + (tx + (right ? -4 : 4)).toFixed(1) + '" y="' + ty.toFixed(1) +
+            '" text-anchor="' + (right ? 'end' : 'start') + '" font-size="' + valueSize +
+            '" font-weight="700" fill="var(--accent)">' + ptxt + '</text>';
+      }
+
       // L'heure du point choisi est toujours écrite ; ses voisines immédiates
       // sautent leur tour, sinon trois étiquettes se collent autour du curseur.
       if (on || (i % timeEvery === 0 && Math.abs(i - active) !== 1)) {
@@ -237,6 +272,11 @@
           '<span><i style="background:var(--rain-3)"></i>intensité (mm/h)</span>' +
           '<span><i style="background:var(--accent);border-radius:99px"></i>probabilité (%)</span>' +
         '</div>' +
+        // Les deux ne viennent pas du même pas de temps chez Open-Meteo. Sans
+        // ce rappel, décaler de 10 min semble ne bouger qu'une des deux
+        // valeurs — et on croit à un bug d'affichage.
+        '<div class="legend-note">Intensité au pas de 15 min, probabilité au pas horaire : ' +
+          'un décalage de 10 min peut bouger l’une sans l’autre.</div>' +
       close;
   }
 
@@ -285,20 +325,33 @@
    * distinguaient que par leur remplissage — illisible à côté l'une de l'autre.
    */
   var MARKER_SETS = {
-    start:  ['🏠', '🚩', '🟢', '🚴', '📍'],
-    end:    ['🏢', '🏁', '🔴', '🎯', '📍'],
+    home:   ['🏠', '🏡', '🚩', '🟢', '📍'],
+    work:   ['🏢', '💼', '🏁', '🔴', '📍'],
     cursor: ['🚴', '🔵', '⏱️', '👤', '📍']
   };
 
-  var markers = { start: '🏠', end: '🏢', cursor: '🚴' };
+  var markers = { home: '🏠', work: '🏢', cursor: '🚴' };
 
   function setMarkers(m) {
-    ['start', 'end', 'cursor'].forEach(function (k) {
+    ['home', 'work', 'cursor'].forEach(function (k) {
       if (m && m[k] && MARKER_SETS[k].indexOf(m[k]) >= 0) markers[k] = m[k];
     });
   }
   function markerSets() { return MARKER_SETS; }
   function markerFor(role) { return markers[role]; }
+
+  /**
+   * Les deux bouts du trajet, **par lieu et non par position**.
+   *
+   * Au retour, le départ est le travail et l'arrivée le domicile : poser 🏠 sur
+   * le premier point des deux sens mettait la maison sur le bureau un jour sur
+   * deux. Une icône qui change de lieu selon le sens ne repère plus rien.
+   */
+  function endpointRoles() {
+    return (shown.route && shown.route.type === 'evening')
+      ? ['work', 'home']
+      : ['home', 'work'];
+  }
 
   /** Cap de a vers b, en degrés depuis le nord. */
   function bearingDeg(a, b) {
@@ -525,6 +578,7 @@
     }).join(' ');
 
     var a = pxPoints[0], b = pxPoints[pxPoints.length - 1];
+    var roles = endpointRoles();
 
     // Point sélectionné par le curseur. Aux deux extrémités il tombe pile sur le
     // repère de départ ou d'arrivée : on n'y met alors que le halo, sinon
@@ -551,7 +605,7 @@
       '<path d="' + d + '" fill="none" stroke="var(--accent)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>' +
       // Le halo passe sous les repères : aux extrémités il doit entourer l'icône
       // de départ ou d'arrivée, pas la recouvrir.
-      halo + markerSvg(a, 'start') + markerSvg(b, 'end') + mark +
+      halo + markerSvg(a, roles[0]) + markerSvg(b, roles[1]) + mark +
     '</svg>';
   }
 
@@ -869,8 +923,9 @@
     };
 
     var a = data.points[0], b = data.points[data.points.length - 1];
-    L.marker(a, { icon: pin('start', 28), keyboard: false }).addTo(map);
-    L.marker(b, { icon: pin('end', 28), keyboard: false }).addTo(map);
+    var roles = endpointRoles();
+    L.marker(a, { icon: pin(roles[0], 28), keyboard: false }).addTo(map);
+    L.marker(b, { icon: pin(roles[1], 28), keyboard: false }).addTo(map);
 
     map.fitBounds(L.latLngBounds(line), { padding: [14, 14] });
 
@@ -1051,7 +1106,19 @@
     });
   }
 
-  function radarMap(route, weather) {
+  /**
+   * Ligne de provenance, sous le graphe : d'où vient le tracé, d'où vient la
+   * carte, d'où vient la pluie. Elle occupait un coin de la carte, où elle
+   * masquait le terrain ; elle se lit aussi bien en pied de bloc, et la carte
+   * y gagne la place.
+   */
+  function creditLine(route, note) {
+    var conf = BASEMAPS[basemap] || BASEMAPS.osm;
+    return esc((route.track_ll ? 'Tracé réel' : 'Points de passage') + ' · ' + conf.credit) +
+      (note ? ' · ' + esc(note) : '');
+  }
+
+  function radarMap(route, weather, note) {
     var coords = trackCoords(route);
     var cells = route.rain_cells || [];
 
@@ -1066,18 +1133,11 @@
     maps[id] = { coords: coords, points: pts, cells: cells };
     sliderPoints = pts;
 
-    var conf = BASEMAPS[basemap] || BASEMAPS.osm;
-    // Deux coins voisins : la mention reste courte pour ne pas venir manger le
-    // bouton d'en face. L'averse simulée, elle, a son propre coin.
-    var caption = (route.track_ll ? 'Tracé réel' : 'Points de passage') + ' · ' + conf.credit;
-
     // Carte, curseur et graphe s'enchaînent sans rien entre eux : ce sont trois
-    // vues du même trajet, elles doivent se lire d'un seul tenant. Le bouton de
-    // vue d'ensemble, la légende et les crédits passent donc après le graphe.
-    // La légende ouvre le bloc : elle vaut pour la carte et pour les barres du
-    // graphe, qui partagent la même rampe. Le bouton de vue d'ensemble et les
-    // crédits passent dans les coins de la carte, pour ne rien intercaler entre
-    // la carte, le curseur et le graphe.
+    // vues du même trajet, elles doivent se lire d'un seul tenant. La légende
+    // ouvre le bloc — elle vaut pour la carte comme pour les barres du graphe,
+    // qui partagent la même rampe — et la provenance le ferme. Seul le bouton
+    // de vue d'ensemble reste dans un coin de la carte, là où il agit.
     return '' +
       '<section class="card mapwrap">' +
         rainKey() +
@@ -1087,10 +1147,10 @@
             ? '<div class="mapover top"><div class="mapfoot demo">☔ averse simulée</div></div>'
             : '') +
           '<div class="mapover left">' + overviewBtn() + '</div>' +
-          '<div class="mapover right"><div class="mapfoot">' + esc(caption) + '</div></div>' +
         '</div>' +
         timeSlider(route) +
         (weather ? rainChart(weather, false) : '') +
+        '<div class="mapcredit" data-block="credit">' + creditLine(route, note) + '</div>' +
       '</section>';
   }
 
@@ -1154,6 +1214,14 @@
    * faisait sauter la ligne sans rien apprendre. Le lieu se lit sur la carte,
    * où le marqueur se déplace en même temps.
    */
+  /** Température du point regardé, avec le ressenti quand il s'en écarte. */
+  function tempTag(wp) {
+    if (!wp || typeof wp.temp !== 'number') return '';
+    var feels = (typeof wp.feels === 'number' && Math.abs(wp.feels - wp.temp) >= 2)
+      ? ' <span class="muted">ressenti ' + wp.feels + '°</span>' : '';
+    return '<span class="slider-temp">' + wp.temp + '°' + feels + '</span>';
+  }
+
   function sliderLabel(route) {
     var pts = route.points || [];
     var head, tail;
@@ -1164,7 +1232,8 @@
     } else {
       var p = pts[frame] || {};
       var f = field.frames[frame] || {};
-      head = '<b>' + esc(f.time || p.time || '') + '</b>';
+      var wp = (shown.weather && shown.weather.points && shown.weather.points[frame]) || {};
+      head = '<b>' + esc(f.time || p.time || '') + '</b>' + tempTag(wp);
 
       // Un départ au-delà de la fenêtre de prévision n'a pas d'image : le dire,
       // plutôt que d'afficher un ciel sec qui serait faux.
@@ -1172,8 +1241,11 @@
         tail = '<span class="slider-rate">pas de prévision</span>';
       } else {
         var rate = onRoute(frame);
+        // La probabilité collée à l'intensité : « sec » tout seul ne disait pas
+        // s'il s'agissait d'un ciel sûr ou d'un créneau à 60 % qui peut tourner.
         tail = '<span class="slider-rate t' + rainTier(rate) + '">' +
-          (rate >= 0.1 ? num(rate) + ' mm/h' : 'sec') + '</span>';
+          (rate >= 0.1 ? num(rate) + ' mm/h' : 'sec') +
+          (typeof wp.prob === 'number' ? ' · ' + wp.prob + ' %' : '') + '</span>';
       }
     }
 
@@ -1266,6 +1338,7 @@
     esc: esc, num: num, rainColor: rainColor, rainTier: rainTier, verdictOf: verdictOf,
     verdictCard: verdictCard, profileStrip: profileStrip, windCard: windCard,
     rainChart: rainChart, radarMap: radarMap, mountMaps: mountMaps, routeSummary: routeSummary,
+    creditLine: creditLine,
     setField: setField, setFrame: setFrame, setOverview: setOverview,
     setBasemap: setBasemap, basemapKeys: basemapKeys, basemapName: basemapName,
     setEngine: setEngine, engineKeys: engineKeys,

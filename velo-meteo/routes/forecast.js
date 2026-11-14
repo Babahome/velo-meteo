@@ -176,7 +176,7 @@ async function fetchForecast(points, replay) {
   const params = {
     latitude: points.map(p => p.lat).join(','),
     longitude: points.map(p => p.lon).join(','),
-    minutely_15: 'precipitation,wind_speed_10m,wind_direction_10m,wind_gusts_10m,apparent_temperature',
+    minutely_15: 'precipitation,wind_speed_10m,wind_direction_10m,wind_gusts_10m,temperature_2m,apparent_temperature',
     hourly: 'precipitation_probability',
     models: MODELS,
     timezone: 'auto',
@@ -250,7 +250,10 @@ async function compute(type, shift, replay, now) {
       km: p.km,
       rate: rate,
       prob: hi >= 0 ? Math.round(h.precipitation_probability[hi] || 0) : 0,
-      temp: qi >= 0 ? Math.round(q.apparent_temperature[qi]) : null,
+      // Les deux : à vélo en novembre, l'écart entre l'air et le ressenti
+      // décide du nombre de couches bien plus que le thermomètre seul.
+      temp:  qi >= 0 ? Math.round(q.temperature_2m[qi]) : null,
+      feels: qi >= 0 ? Math.round(q.apparent_temperature[qi]) : null,
       wind_kmh: qi >= 0 ? Math.round(q.wind_speed_10m[qi] || 0) : 0,
       gust_kmh: qi >= 0 ? Math.round(q.wind_gusts_10m[qi] || 0) : 0,
       wind_dir: qi >= 0 ? Math.round(q.wind_direction_10m[qi] || 0) : 0,
@@ -271,6 +274,7 @@ async function compute(type, shift, replay, now) {
   const max_prob  = Math.max.apply(null, points.map(p => p.prob));
   const peak      = points.reduce((a, b) => (b.rate > a.rate ? b : a), points[0]);
   const temps     = points.map(p => p.temp).filter(t => t !== null);
+  const feels     = points.map(p => p.feels).filter(t => t !== null);
 
   // Vent : moyenne sur le trajet, orientation jugée sur le cap de chaque segment.
   const mean = arr => arr.reduce((s, v) => s + v, 0) / (arr.length || 1);
@@ -302,12 +306,14 @@ async function compute(type, shift, replay, now) {
     },
     weather: {
       type: type,
-      points: points.map(p => ({ i: p.i, time: p.time, label: p.label, rate: p.rate, mm: p.mm, prob: p.prob, temp: p.temp })),
+      points: points.map(p => ({ i: p.i, time: p.time, label: p.label, rate: p.rate, mm: p.mm,
+                                 prob: p.prob, temp: p.temp, feels: p.feels })),
       total_mm: total_mm,
       max_rate: +Math.max.apply(null, points.map(p => p.rate)).toFixed(2),
       max_prob: max_prob,
       peak: { time: peak.time, label: peak.label, rate: peak.rate, mm: peak.mm, prob: peak.prob },
       temp_c: temps.length ? Math.round(mean(temps)) : null,
+      feels_c: feels.length ? Math.round(mean(feels)) : null,
       for_date: isoLocal(dep, 15).slice(0, 10),
       replay: replay || null,
       departure_now: !!now
@@ -461,7 +467,7 @@ function overview(grid, points, frames) {
 // ça. À 1,8 km de pas, une carte de vélotaf ne contient que deux cases et le
 // rendu vire à l'aplat uniforme : ce sont les dégradés qui dessinent le nuage.
 const GRID_STEP_M = 900;
-const GRID_MAX_SIDE = 7;    // 49 points au maximum dans la requête Open-Meteo
+const GRID_MAX_SIDE = 9;    // 81 points par requête : la maille suit AROME (~1,5 km)
 
 /**
  * Champ de pluie autour du trajet, **à l'heure de passage** — et non à l'heure
@@ -613,7 +619,8 @@ function demoWeather(route, hhmm, shift, type) {
       // Probabilité et ressenti sont fictifs eux aussi, mais cohérents avec la
       // pluie : un verdict calculé sur un ciel sec n'aurait aucun sens ici.
       prob: Math.min(95, Math.round(rate * 9 + (rate > 0.1 ? 25 : 5))),
-      temp: 13
+      temp: 13,
+      feels: 10
     };
   });
 
@@ -629,6 +636,7 @@ function demoWeather(route, hhmm, shift, type) {
     max_prob: Math.max.apply(null, points.map(p => p.prob)),
     peak: { time: peak.time, label: peak.label, rate: peak.rate, mm: peak.mm, prob: peak.prob },
     temp_c: 13,
+    feels_c: 10,
     for_date: null
   };
 }

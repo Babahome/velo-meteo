@@ -82,8 +82,10 @@
     // c'est un « et si je partais 20 minutes plus tard », pas un réglage.
     shift: 0,
     markers: {
-      start: localStorage.getItem('vm.icon.start') || '🏠',
-      end: localStorage.getItem('vm.icon.end') || '🏢',
+      // Les repères se nommaient « départ » / « arrivée » jusqu'à la 0.18.0 :
+      // on relit l'ancienne clé pour ne pas perdre un choix déjà fait.
+      home: localStorage.getItem('vm.icon.home') || localStorage.getItem('vm.icon.start') || '🏠',
+      work: localStorage.getItem('vm.icon.work') || localStorage.getItem('vm.icon.end') || '🏢',
       cursor: localStorage.getItem('vm.icon.cursor') || '🚴'
     }
   };
@@ -246,11 +248,18 @@
       return '<div class="mockbar warn-bar">🎞️ Replay du ' + esc(prettyReplay(state.replay)) +
         ' · prévisions réellement émises ce jour-là</div>';
     }
-    if (state.source === 'live') {
-      return '<div class="livebar">✅ Données réelles · Open-Meteo' +
-        (forDate ? ' · trajet du ' + esc(forDate.split('-').reverse().join('/')) : '') + '</div>';
-    }
+    // En direct, plus rien en haut : la provenance a sa place en pied de bloc,
+    // sous le graphe, avec celle du tracé et du fond de carte. Un bandeau vert
+    // permanent au-dessus de la carte ne prévenait de rien.
+    if (state.source === 'live') return '';
     return '<div class="mockbar">Maquette · données fictives' + (state.offline ? ' · hors-ligne' : '') + '</div>';
+  }
+
+  /** La part « météo » de la ligne de provenance, sous le graphe. */
+  function sourceNote(forDate) {
+    if (state.source !== 'live') return '';
+    return 'pluie Open-Meteo' +
+      (forDate ? ' · trajet du ' + forDate.split('-').reverse().join('/') : '');
   }
 
   function setupCta() {
@@ -303,6 +312,7 @@
 
     return {
       source: sourceBar(weather.for_date),
+      credit: UI.creditLine(route, sourceNote(weather.for_date)),
       verdict: UI.verdictCard(weather, v, compact),
       profile: UI.profileStrip(route, weather),
       wind: UI.windCard(wind),
@@ -329,7 +339,7 @@
       // trajet, qui se synchronisent entre elles.
       if (state.layout === 'B') {
         return head +
-          UI.radarMap(route, weather) +
+          UI.radarMap(route, weather, sourceNote(weather.for_date)) +
           block('verdict', b.verdict) +
           block('profile', b.profile) +
           block('wind', b.wind) +
@@ -343,7 +353,7 @@
           block('profile', b.profile) +
           block('wind', b.wind) +
           '<details class="acc"><summary>Carte et pluie du trajet</summary>' +
-            '<div class="acc-body">' + UI.radarMap(route, weather) + '</div></details>' +
+            '<div class="acc-body">' + UI.radarMap(route, weather, sourceNote(weather.for_date)) + '</div></details>' +
           cta;
       }
 
@@ -353,7 +363,7 @@
         block('verdict', b.verdict) +
         block('profile', b.profile) +
         block('wind', b.wind) +
-        UI.radarMap(route, weather) +
+        UI.radarMap(route, weather, sourceNote(weather.for_date)) +
         block('summary', b.summary) +
         cta;
     });
@@ -633,8 +643,8 @@
   }
 
   var MARKER_ROLES = [
-    { key: 'start', label: 'Départ' },
-    { key: 'end', label: 'Arrivée' },
+    { key: 'home', label: 'Domicile' },
+    { key: 'work', label: 'Travail' },
     { key: 'cursor', label: 'Position sur le trajet' }
   ];
 
@@ -654,9 +664,10 @@
     return '<section class="card">' +
         '<div class="card-pad" style="padding-bottom:4px"><div class="card-title">Repères de la carte</div></div>' +
         '<div class="card-pad" style="padding-top:0">' + rows + '</div>' +
-        '<div class="card-pad" style="padding-top:0"><div class="note">Départ, arrivée et position sur le trajet ' +
-        'ont chacun leur icône. Par défaut 🏠 / 🏢 / 🚴 : trois formes franchement différentes, ' +
-        'là où trois pastilles de couleur se ressemblaient trop.</div></div>' +
+        '<div class="card-pad" style="padding-top:0"><div class="note">L’icône suit le <b>lieu</b>, pas la ' +
+        'place dans le trajet : au retour, 🏢 reste sur le travail et 🏠 sur la maison. Par défaut ' +
+        '🏠 / 🏢 / 🚴 — trois formes franchement différentes, là où trois pastilles de couleur se ' +
+        'ressemblaient trop.</div></div>' +
       '</section>';
   }
 
@@ -887,7 +898,7 @@
         '<section class="card">' +
           '<div class="card-pad">' +
             '<div class="card-title">État</div>' +
-            '<div class="small muted">Version 0.17.0 · ' +
+            '<div class="small muted">Version 0.18.0 · ' +
               (state.config.configured ? 'trajet réel configuré' : 'aucun trajet : données fictives') +
               (state.offline ? ' · API injoignable' : '') + '.</div>' +
           '</div>' +

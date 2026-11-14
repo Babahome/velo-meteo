@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.18.0 — Température, les deux valeurs du point choisi, et l'icône au bon endroit
+
+- **Corrigé : l'icône maison se retrouvait sur le bureau au retour.** Les deux bouts du
+  trajet étaient repérés par leur *place* — premier point, dernier point — et non par leur
+  *lieu*. Au retour, le départ est le travail : 🏠 s'y posait un jour sur deux. L'icône
+  suit maintenant le lieu dans les deux sens, et le réglage s'appelle « Domicile » /
+  « Travail » plutôt que « Départ » / « Arrivée ». Un choix déjà fait est relu tel quel.
+- **La température, au point regardé.** `7° ressenti 4°` sous le curseur, et la moyenne
+  dans la carte verdict. Le ressenti n'est écrit que s'il s'écarte d'au moins deux degrés.
+  Les deux suivent le curseur et le décalage. Open-Meteo les sert dans la requête qui
+  porte déjà la pluie : aucun appel en plus.
+- **La probabilité à côté de l'intensité.** La pastille du curseur affiche
+  `1,2 mm/h · 65 %`, et le point choisi écrit sa probabilité à côté de son rond sur le
+  graphe, du côté de la barre voisine la plus basse. « Sec » tout seul ne disait pas s'il
+  s'agissait d'un ciel sûr ou d'un créneau à 60 % qui peut tourner.
+- **Un rappel sous la légende du graphe** : l'intensité vient du pas de 15 min
+  d'Open-Meteo, la probabilité de son pas horaire. Un décalage de 10 min peut donc bouger
+  l'une sans l'autre — ce qui, à l'écran, ressemblait à un bug d'affichage.
+- **La provenance passe sous le graphe.** Tracé, fond de carte et source météo d'un seul
+  tenant, en pied de bloc. Elle encombrait un coin de la carte, et le bandeau vert
+  « Données réelles » occupait le haut de l'écran sans prévenir de rien. Le haut ne garde
+  que ce qui avertit : averse simulée, rejeu, repli maquette, prévisions indisponibles.
+- **Maille des nuages de pluie resserrée** : 9 × 9 cases au lieu de 7 × 7, soit 81 points
+  en une requête. Sur un trajet de 18 km, 2,4 × 1,6 km au lieu de 3,3 × 2,2 — la maille
+  native d'AROME est à 1,5 km. Une cellule isolée a moins de chances de passer entre deux
+  points.
+
+**Deux sources évaluées, deux fois non.** *WeatherNext 3* (Google DeepMind) publie la
+précipitation au pas horaire sur une grille de ~10 km : quarante fois plus grossier en
+surface que ce que l'app utilise, et quatre fois dans le temps. *PIAF* (Météo-France)
+apporterait de la fraîcheur — un champ toutes les 5 min, radar mêlé à la prévision — mais
+pas de résolution : `meteofrance_arome_france_hd_15min` et `meteofrance_seamless` donnent
+**la même valeur sur les 77 créneaux** où le premier a une donnée. Détail dans DOCS.
+
 ## 0.17.0 — Maintenant
 
 - **Un troisième bouton, entre Matin et Soir** : le trajet en partant *à l'instant*, pour

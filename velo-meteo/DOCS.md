@@ -212,9 +212,15 @@ contredisent.
 
 ### Les repères
 
-🏠 le départ, 🏢 l'arrivée, 🚴 la position choisie au curseur. Trois formes franchement
+🏠 le domicile, 🏢 le travail, 🚴 la position choisie au curseur. Trois formes franchement
 différentes : trois pastilles de couleur, elles, se ressemblaient trop sur un fond de
 carte. Chacun se change dans **Réglages → Repères de la carte**.
+
+**L'icône suit le lieu, pas la place dans le trajet.** Au retour, le départ est le travail
+et l'arrivée le domicile : poser 🏠 sur le premier point des deux sens mettait la maison
+sur le bureau un jour sur deux. Une icône qui change de lieu selon le sens ne repère plus
+rien. Les anciens réglages « Départ » / « Arrivée » sont relus tels quels : un choix déjà
+fait n'est pas perdu.
 
 Aux deux extrémités du curseur, la position tombe exactement sur le départ ou l'arrivée :
 seul le halo est alors dessiné, pour ne pas masquer l'icône qu'on cherche à distinguer.
@@ -228,9 +234,15 @@ zigzags du tracé.
 
 ### Les nuages de pluie
 
-Par-dessus la carte, les précipitations **à l'heure où tu passes**. Une grille d'environ
-900 m est échantillonnée autour du trajet chez Open-Meteo, chaque case à l'horaire du
-point de passage le plus proche, et le résultat est dessiné en taches floues.
+Par-dessus la carte, les précipitations **à l'heure où tu passes**. Une grille est
+échantillonnée autour du trajet chez Open-Meteo — 9 × 9 cases au plus, soit 81 points en
+une requête — chaque case à l'horaire du point de passage le plus proche, et le résultat
+est dessiné en taches floues.
+
+La grille cadre 1,6 fois la boîte du trajet : une averse qui arrive compte autant que
+celle qui est déjà dessus. Sur un trajet de 18 km, cela donne environ **20 × 13 km pour
+une maille de 2,4 × 1,6 km** — proche de la maille native d'AROME (1,5 km). À 7 × 7 cases,
+la maille tombait à 3,3 km et une cellule isolée pouvait passer entre deux points.
 
 La couleur suit l'**échelle météo usuelle**, rappelée par la légende sous la carte :
 bruine sous 1 mm/h, modérée à partir de 1, forte à partir de 2,5, très forte au-delà de
@@ -241,6 +253,16 @@ sous un flou, quatre bleus se confondent, quatre teintes non.
 C'est une **prévision**, pas une image radar, et c'est délibéré : un radar montre ce qui
 tombe maintenant, alors que le reste de l'écran (verdict, profil, créneaux) parle de
 l'heure de départ. Deux échelles de temps sur le même écran se lisent de travers.
+
+> **« Il pleut sur l'autre radar et l'app n'affiche rien. »** C'est la conséquence directe
+> du paragraphe ci-dessus, et c'est presque toujours une question d'**heure**, pas de
+> chargement. À 22 h 45, le trajet affiché est celui du lendemain matin : la carte montre
+> la pluie prévue à 7 h 55, qui peut être nulle pendant qu'il tombe des cordes dehors. La
+> ligne de provenance, sous le graphe, donne la date du trajet affiché, et le curseur
+> l'heure exacte de chaque case. Pour voir ce qui tombe **maintenant**, le bouton
+> **Maintenant** est là pour ça. Reste ensuite la maille : 2,4 km, contre quelques
+> centaines de mètres pour une image radar — une cellule de quartier peut encore passer
+> entre deux points.
 
 > **Pourquoi ça ne colle pas avec weather.com.** D'abord parce qu'une prévision et une
 > observation radar ne peuvent pas coïncider. Ensuite parce que le modèle compte : le
@@ -274,8 +296,14 @@ n'apporterait rien de vérifiable.
 
 Les trois se suivent sans rien entre eux, dans une même carte : ce sont trois vues du
 même trajet. La légende de l'échelle ouvre le bloc — elle vaut pour la carte comme pour
-les barres du graphe, qui partagent la même rampe. Le bouton de vue d'ensemble et les
-crédits sont posés en surimpression dans les coins bas de la carte, gauche et droite.
+les barres du graphe, qui partagent la même rampe — et la **provenance** le ferme, sous le
+graphe : tracé, fond de carte et source météo d'un seul tenant. Elle occupait un coin de
+la carte, où elle masquait le terrain, et un bandeau vert permanent au-dessus de la carte
+annonçait « données réelles » sans prévenir de rien. Seul le bouton de vue d'ensemble
+reste en surimpression, dans le coin où il agit.
+
+Le haut de l'écran ne garde donc que ce qui **avertit** : averse simulée, rejeu, repli sur
+la maquette, prévisions indisponibles. En direct, il n'y a plus rien à y mettre.
 
 Et ils sont **synchronisés** : déplacer le curseur, ou attraper la poignée posée sur le
 graphe et la faire glisser, désigne le même point. Le marqueur de la carte, la position
@@ -326,6 +354,35 @@ dans le navigateur du téléphone.
   Tout ce qui décide « j'y vais ou pas » tient dans le premier écran.
 - **C — Coup d'œil** : verdict + profil + vent, la carte et le graphe repliés dans un
   unique accordéon. Zéro scroll.
+
+### Les deux valeurs du point choisi
+
+Sous le curseur, à droite, une pastille donne l'**intensité et la probabilité** du point
+regardé : `1,2 mm/h · 65 %`. « Sec » tout seul ne disait pas s'il s'agissait d'un ciel sûr
+ou d'un créneau à 60 % qui peut tourner. Sur le graphe, le point choisi écrit la même
+probabilité à côté de son rond, du côté de la barre voisine la plus basse ; son intensité
+est déjà au-dessus de sa barre. Les deux chiffres du point regardé se lisent donc sans
+viser l'axe de droite.
+
+> **Pourquoi un décalage peut bouger l'une sans l'autre.** Les deux courbes ne viennent
+> pas du même pas de temps chez Open-Meteo : l'intensité du pas de **15 minutes**, la
+> probabilité du pas **horaire**. Décaler le départ de 10 minutes change souvent
+> l'intensité sans toucher à la probabilité — et par temps sec, l'inverse : la probabilité
+> dérive de 15 à 20 % pendant que l'intensité reste à 0,0 et semble figée. Un rappel sous
+> la légende du graphe le dit, parce que l'écran seul donnait l'impression d'un bug.
+
+### La température
+
+L'air et le ressenti, tous les deux. À vélo en novembre, l'écart entre les deux décide du
+nombre de couches bien plus que le thermomètre seul.
+
+- Sous le curseur, à gauche : `7° ressenti 4°` **au point regardé**. Le ressenti n'est
+  écrit que lorsqu'il s'écarte d'au moins deux degrés — en deçà, la mention n'apprend rien.
+- Dans la carte verdict, la moyenne du trajet, avec le même principe sur son étiquette.
+
+Les deux suivent le curseur et le décalage horaire, comme la pluie et le vent. Open-Meteo
+sert `temperature_2m` et `apparent_temperature` dans la requête qui porte déjà la pluie :
+aucune source ni aucun appel en plus.
 
 ### mm/h ou mm : deux chiffres différents
 
@@ -410,6 +467,40 @@ villes françaises et deux jours au pas de 15 minutes, les deux s'accordent sur 
 créneaux sur 1920**, et les trois écarts sont des créneaux où `seamless` a une donnée que
 AROME HD n'a pas. AROME HD seul s'arrête vers 48 h. Le pinner ne gagnerait rien et
 coûterait de la couverture — il reste dans la comparaison du mode debug.
+
+Même conclusion pour `meteofrance_arome_france_hd_15min`, le modèle de très courte
+échéance (1,5 km, 15 min, **6 h d'horizon**, un run par heure) : sur les 77 créneaux où il
+a une donnée, `seamless` donne **exactement la même valeur**, et il n'en a aucune sur les
+115 autres. Autrement dit, l'app reçoit déjà AROME HD au pas de 15 minutes sur toute la
+fenêtre de très courte échéance, sans rien demander de particulier.
+
+### Les sources écartées, et pourquoi
+
+**WeatherNext 3 (Google DeepMind).** Évalué en novembre 2026. La précipitation y est
+publiée au pas **horaire sur une grille de 0,1°, soit environ 10 km** — les « 5 km »
+annoncés concernent d'autres variables de surface. Pour un trajet de 18 km, cela fait deux
+cases et un chiffre par heure, là où l'app travaille au point de passage et au pas de
+5 minutes sur une maille de 1,5 km. Quarante fois plus grossier en surface, quatre fois
+plus grossier dans le temps : le modèle ne peut pas répondre à la question que pose l'app.
+S'ajoutent un accès sur liste blanche et des conditions d'usage « expérimentales » pour le
+temps réel. Son intérêt est ailleurs — la prévision globale à 15 jours — et n'a pas de
+place ici.
+
+**PIAF (Météo-France), via le portail API.** Repéré grâce à
+[pleutpas.fr](https://github.com/jlzdev/pleutpas), qui vise la même chose que cette app.
+PIAF fusionne extrapolation radar et modèle, se recalcule **toutes les 5 minutes** et
+couvre **−1 h à +3 h**. Ce qu'il apporterait n'est pas la résolution — elle est déjà
+équivalente, voir ci-dessus — mais la **fraîcheur** : un nouveau champ toutes les 5 min au
+lieu d'un run par heure, et l'observation radar mêlée à la prévision. C'est exactement ce
+qui manque au bouton « Maintenant ». Le prix : une clé d'API à configurer, la lecture de
+grilles WCS côté add-on, la France seule, et une seconde source à maintenir pour les trois
+premières heures. Gain réel mais ciblé, chantier non négligeable : à traiter à part.
+
+> L'architecture de pleutpas — aucun backend, deux workflows GitHub Actions qui colorisent
+> les grilles en PNG et les publient sur des branches orphelines — est élégante pour un
+> site public et statique. Elle ne transpose pas ici : un add-on Home Assistant *est* un
+> backend, qui tourne déjà chez soi avec son `/data`, et le trajet est personnel. On
+> perdrait la personnalisation pour résoudre un problème qu'on n'a pas.
 
 ## Architecture
 
