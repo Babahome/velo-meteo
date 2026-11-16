@@ -258,8 +258,7 @@
   /** La part « météo » de la ligne de provenance, sous le graphe. */
   function sourceNote(forDate) {
     if (state.source !== 'live') return '';
-    return 'pluie Open-Meteo' +
-      (forDate ? ' · trajet du ' + forDate.split('-').reverse().join('/') : '');
+    return 'pluie Open-Meteo' + (forDate ? ' · trajet du ' + UI.dayFull(forDate) : '');
   }
 
   function setupCta() {
@@ -412,6 +411,7 @@
       var usual = slots.filter(function (s) { return s.is_usual; })[0] ||
                   slots.filter(function (s) { return s.time === route.departure; })[0];
 
+      var jour = UI.dayTag(payload.for_date);
       var ref = payload.departure_now ? 'qu’un départ immédiat' : 'que d’habitude';
       var delta = '';
       if (usual) {
@@ -441,7 +441,8 @@
         '<section class="card">' +
           '<div class="hero-slot ' + best.verdict + '">' +
             '<div>' +
-              '<div class="small muted" style="text-transform:uppercase;letter-spacing:.06em;font-weight:700">Meilleur créneau</div>' +
+              '<div class="small muted" style="text-transform:uppercase;letter-spacing:.06em;font-weight:700">Meilleur créneau' +
+                (jour ? ' · ' + esc(jour) : '') + '</div>' +
               '<div class="big">' + esc(best.time) + '</div>' +
               '<div class="small">' + num(best.mm, 2) + ' mm · ' + best.prob_max + ' % de proba · vent ' + best.wind_kmh + ' km/h</div>' +
             '</div>' +
@@ -898,7 +899,7 @@
         '<section class="card">' +
           '<div class="card-pad">' +
             '<div class="card-title">État</div>' +
-            '<div class="small muted">Version 0.18.0 · ' +
+            '<div class="small muted">Version 0.19.0 · ' +
               (state.config.configured ? 'trajet réel configuré' : 'aucun trajet : données fictives') +
               (state.offline ? ' · API injoignable' : '') + '.</div>' +
           '</div>' +

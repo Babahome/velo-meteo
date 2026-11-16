@@ -235,14 +235,21 @@ svg.chart{cursor:ew-resize;touch-action:pan-y}
   border:3px solid var(--surface);box-shadow:var(--shadow)
 }
 .mapslider input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:4px}
-/* Heure a gauche, intensite a droite, rappel de decalage centre entre les deux. */
-.slider-lbl{display:flex;align-items:center;gap:6px;font-size:13px;padding:2px 0 4px;min-height:34px}
+/* Jour, heure et temperature a gauche, intensite et probabilite a droite ; le
+   rappel de decalage, lui, passe en dessous sur sa propre ligne. */
+.slider-lbl{display:flex;align-items:center;flex-wrap:wrap;gap:6px;font-size:13px;padding:2px 0 4px;min-height:34px}
 .slider-lbl > b{flex:none}
-.slider-mid{flex:1;display:flex;justify-content:center;min-width:0}
+.slider-mid{order:3;flex-basis:100%;display:flex;justify-content:center;min-width:0;margin-top:2px}
+/* Le jour n'apparaît que si le trajet n'est pas celui d'aujourd'hui : il doit
+   alors se remarquer, d'où la pastille plutôt qu'une mention grise de plus. */
+.slider-day{
+  flex:none;font-size:11px;font-weight:700;white-space:nowrap;
+  padding:2px 7px;border-radius:999px;background:var(--surface-2);color:var(--text-dim)
+}
 .slider-temp{flex:none;font-size:12px;color:var(--text-dim);white-space:nowrap}
 .slider-temp .muted{font-weight:400}
 .slider-rate{
-  flex:none;font-size:12px;font-weight:700;white-space:nowrap;
+  flex:none;margin-left:auto;font-size:12px;font-weight:700;white-space:nowrap;
   padding:2px 8px;border-radius:999px;background:var(--surface-2);color:var(--text-dim)
 }
 /* La pastille reprend la couleur exacte du palier, comme la legende. */

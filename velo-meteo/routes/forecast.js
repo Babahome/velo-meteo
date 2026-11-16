@@ -401,7 +401,8 @@ async function getWindows(type, stepMin, count, replay, now) {
     });
   }
 
-  return { type: type, windows: windows, usual: hhmm, departure_now: !!now };
+  return { type: type, windows: windows, usual: hhmm, departure_now: !!now,
+           for_date: isoLocal(base, 15).slice(0, 10) };
 }
 
 /* ---------- champ de pluie autour du trajet ---------- */
@@ -412,22 +413,31 @@ async function getWindows(type, stepMin, count, replay, now) {
  * les 8 points de passage ne disent que ce qui tombe *sur* le trajet, pas ce
  * qui arrive à côté.
  */
-function buildGrid(points, stepM, maxSide) {
+function buildGrid(points, marginM, maxSide) {
   const lats = points.map(p => p.lat), lons = points.map(p => p.lon);
   const minLat = Math.min(...lats), maxLat = Math.max(...lats);
   const minLon = Math.min(...lons), maxLon = Math.max(...lons);
 
-  // Marge autour du trajet : une averse qui arrive compte autant que celle qui
-  // est déjà dessus. La carte cadre plus large que le trajet, la grille aussi.
+  // Marge **en kilomètres**, la même des quatre côtés, et non un pourcentage de
+  // la boîte du trajet.
+  //
+  // Avec un pourcentage, un trajet nord-sud recevait une marge latérale
+  // ridicule — 2,7 km de chaque côté sur le trajet de référence — alors que la
+  // carte, en paysage, montrait 18 km de large : les nuages s'arrêtaient en
+  // bande au milieu d'une carte vide. Une averse qui arrive compte autant que
+  // celle qui est déjà dessus, et elle arrive par le côté.
   const midLat = (minLat + maxLat) / 2;
-  const degLat = stepM / 111320;
-  const degLon = stepM / (111320 * Math.cos(midLat * Math.PI / 180) || 1);
+  const perM = 1 / 111320;
+  const marLat = marginM * perM;
+  const marLon = marginM * perM / (Math.cos(midLat * Math.PI / 180) || 1);
 
-  const spanLat = (maxLat - minLat) * 1.6 + degLat;
-  const spanLon = (maxLon - minLon) * 1.6 + degLon;
+  const spanLat = (maxLat - minLat) + 2 * marLat;
+  const spanLon = (maxLon - minLon) + 2 * marLon;
 
-  const nLat = Math.max(3, Math.min(maxSide, Math.round(spanLat / degLat) + 1));
-  const nLon = Math.max(3, Math.min(maxSide, Math.round(spanLon / degLon) + 1));
+  // Le côté est toujours au plafond en pratique : la marge seule fait déjà
+  // 12 km, soit bien plus que ce qu'on échantillonnerait au kilomètre.
+  const nLat = Math.max(3, maxSide);
+  const nLon = Math.max(3, maxSide);
 
   const out = [];
   for (let i = 0; i < nLat; i++) {
@@ -463,11 +473,15 @@ function overview(grid, points, frames) {
   }));
 }
 
-// La maille des modèles tourne autour de 2 km ; on échantillonne plus fin que
-// ça. À 1,8 km de pas, une carte de vélotaf ne contient que deux cases et le
-// rendu vire à l'aplat uniforme : ce sont les dégradés qui dessinent le nuage.
-const GRID_STEP_M = 900;
-const GRID_MAX_SIDE = 9;    // 81 points par requête : la maille suit AROME (~1,5 km)
+// Marge de 6 km tout autour du trajet : de quoi voir arriver une cellule avant
+// qu'elle ne soit dessus, et de quoi couvrir toute la largeur de la carte, qui
+// est en paysage alors qu'un trajet domicile-travail est souvent en long.
+const GRID_MARGIN_M = 6000;
+// 11 × 11 = 121 points en **une** requête. Open-Meteo compte une requête HTTP
+// comme un appel, quel que soit le nombre de positions : la pondération porte
+// sur le nombre de variables (au-delà de 10) et sur la durée (au-delà de deux
+// semaines). Le coût en quota est donc le même qu'à 49 points.
+const GRID_MAX_SIDE = 11;
 
 /**
  * Champ de pluie autour du trajet, **à l'heure de passage** — et non à l'heure
@@ -478,7 +492,7 @@ const GRID_MAX_SIDE = 9;    // 81 points par requête : la maille suit AROME (~1
  * l'autre sans aller-retour réseau. `cells` reste la vue d'ensemble.
  */
 async function computeField(route, hhmm, shift, replay, now) {
-  const grid = buildGrid(route.points, GRID_STEP_M, GRID_MAX_SIDE);
+  const grid = buildGrid(route.points, GRID_MARGIN_M, GRID_MAX_SIDE);
   const locs = await fetchForecast(grid.cells, replay);
   const offset = locs[0].utc_offset_seconds || 0;
   const dep = replay ? replayDeparture(replay)
@@ -534,7 +548,7 @@ const DEMO_PEAK = 14;        // mm/h au cœur, de quoi atteindre le dernier pali
 
 /** Géométrie commune à toutes les vues de l'averse simulée. */
 function demoGeom(route) {
-  const grid = buildGrid(route.points, GRID_STEP_M, GRID_MAX_SIDE);
+  const grid = buildGrid(route.points, GRID_MARGIN_M, GRID_MAX_SIDE);
   const pts = route.points;
   return {
     grid: grid,

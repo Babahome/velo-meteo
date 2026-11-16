@@ -235,14 +235,24 @@ zigzags du tracé.
 ### Les nuages de pluie
 
 Par-dessus la carte, les précipitations **à l'heure où tu passes**. Une grille est
-échantillonnée autour du trajet chez Open-Meteo — 9 × 9 cases au plus, soit 81 points en
-une requête — chaque case à l'horaire du point de passage le plus proche, et le résultat
-est dessiné en taches floues.
+échantillonnée autour du trajet chez Open-Meteo — 11 × 11 cases, soit 121 points en une
+requête — chaque case à l'horaire du point de passage le plus proche, et le résultat est
+dessiné en taches floues.
 
-La grille cadre 1,6 fois la boîte du trajet : une averse qui arrive compte autant que
-celle qui est déjà dessus. Sur un trajet de 18 km, cela donne environ **20 × 13 km pour
-une maille de 2,4 × 1,6 km** — proche de la maille native d'AROME (1,5 km). À 7 × 7 cases,
-la maille tombait à 3,3 km et une cellule isolée pouvait passer entre deux points.
+La grille ajoute **6 km de marge de chaque côté** du trajet, en kilomètres et non en
+pourcentage de la boîte. La nuance compte : avec un pourcentage, un trajet en long
+recevait une marge latérale ridicule — 2,7 km sur le trajet de référence — alors que la
+carte, en paysage, montrait 18 km de large. Les nuages s'arrêtaient en bande au milieu
+d'une carte vide, et une cellule qui approchait par le côté restait invisible jusqu'à être
+dessus.
+
+Sur un trajet de 18 km, cela donne **20 × 24 km pour une maille de 2,0 × 2,4 km** — proche
+de la maille native d'AROME (1,5 km), et un peu plus large que ce que la carte affiche.
+
+> **Le coût en quota est nul.** Open-Meteo compte « une requête HTTP, un appel », quel que
+> soit le nombre de positions ; la pondération porte sur le nombre de variables (au-delà
+> de 10) et sur la durée (au-delà de deux semaines). Passer de 49 à 121 points n'a donc
+> rien changé au compteur. Mesuré : 371 ms pour une requête froide, 13 ms en cache.
 
 La couleur suit l'**échelle météo usuelle**, rappelée par la légende sous la carte :
 bruine sous 1 mm/h, modérée à partir de 1, forte à partir de 2,5, très forte au-delà de
@@ -357,8 +367,10 @@ dans le navigateur du téléphone.
 
 ### Les deux valeurs du point choisi
 
-Sous le curseur, à droite, une pastille donne l'**intensité et la probabilité** du point
-regardé : `1,2 mm/h · 65 %`. « Sec » tout seul ne disait pas s'il s'agissait d'un ciel sûr
+La ligne sous le curseur porte, de gauche à droite : le jour s'il n'est pas aujourd'hui,
+l'heure de passage, la température, puis à droite une pastille avec l'**intensité et la
+probabilité** du point regardé : `1,2 mm/h · 65 %`. Le rappel de décalage, lui, prend sa
+propre ligne en dessous quand il y en a un — c'est un bouton, pas une lecture. « Sec » tout seul ne disait pas s'il s'agissait d'un ciel sûr
 ou d'un créneau à 60 % qui peut tourner. Sur le graphe, le point choisi écrit la même
 probabilité à côté de son rond, du côté de la barre voisine la plus basse ; son intensité
 est déjà au-dessus de sa barre. Les deux chiffres du point regardé se lisent donc sans
@@ -370,6 +382,19 @@ viser l'axe de droite.
 > l'intensité sans toucher à la probabilité — et par temps sec, l'inverse : la probabilité
 > dérive de 15 à 20 % pendant que l'intensité reste à 0,0 et semble figée. Un rappel sous
 > la légende du graphe le dit, parce que l'écran seul donnait l'impression d'un bug.
+
+### Quel jour
+
+L'app ouvre sur le **prochain** trajet : le soir, c'est celui de demain matin. Rien à
+l'écran ne le disait, et un décalage de ±2 h peut en plus faire changer de jour.
+
+Une pastille `demain` s'affiche donc à gauche de l'heure, sous le curseur — et seulement
+quand le trajet n'est **pas** celui d'aujourd'hui. Le silence vaut « aujourd'hui », qui
+est de loin le cas le plus fréquent et n'a pas à encombrer une ligne déjà chargée. Au-delà
+de demain, la pastille donne le jour et la date : `jeu. 19/11`.
+
+Le même repère apparaît en tête du **meilleur créneau**, et la ligne de provenance sous le
+graphe écrit le jour en toutes lettres : *trajet du mardi 17/11/2026*.
 
 ### La température
 

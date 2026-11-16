@@ -4,7 +4,7 @@ Météo (pluie, vent) sur le trajet vélotaf du matin et du soir.
 
 | Add-on | Version | Port | État |
 |---|---|---|---|
-| [`velo-meteo`](velo-meteo/) | 0.18.0 | 8100 | Température au point regardé, probabilité à côté de l’intensité |
+| [`velo-meteo`](velo-meteo/) | 0.19.0 | 8100 | Nuages de pluie élargis à 6 km autour du trajet, jour affiché |
 
 Renseigne ton domicile, ton lieu de travail et tes horaires dans l'onglet Réglages :
 l'add-on géocode les adresses, calcule ton itinéraire vélo réel et affiche les prévisions

@@ -1118,6 +1118,11 @@
       (note ? ' · ' + esc(note) : '');
   }
 
+  /** « demain » / « lundi 16/11/2026 » : exportés pour les autres pages. */
+  function dayNames() {
+    return { tag: dayTag, full: dayFull };
+  }
+
   function radarMap(route, weather, note) {
     var coords = trackCoords(route);
     var cells = route.rain_cells || [];
@@ -1214,6 +1219,51 @@
    * faisait sauter la ligne sans rien apprendre. Le lieu se lit sur la carte,
    * où le marqueur se déplace en même temps.
    */
+  var JOURS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
+
+  /** Minuit local, pour une date "YYYY-MM-DD" ou pour aujourd'hui. */
+  function dayOf(iso) {
+    if (!iso) return null;
+    var p = String(iso).slice(0, 10).split('-');
+    if (p.length !== 3) return null;
+    return new Date(+p[0], +p[1] - 1, +p[2]);
+  }
+
+  /** Nombre de jours entiers entre aujourd'hui et la date donnée. */
+  function daysAhead(iso) {
+    var d = dayOf(iso);
+    if (!d) return null;
+    var now = new Date();
+    var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    return Math.round((d - today) / 864e5);
+  }
+
+  /**
+   * Le jour du trajet affiché, en court, **et seulement quand ce n'est pas
+   * aujourd'hui**.
+   *
+   * L'app ouvre sur le prochain trajet : le soir, c'est celui de demain matin,
+   * et rien à l'écran ne le disait. Le silence vaut donc « aujourd'hui » — le
+   * cas de loin le plus fréquent, qui n'a pas à encombrer la ligne.
+   */
+  function dayTag(iso) {
+    var n = daysAhead(iso);
+    if (n === null || n === 0) return '';
+    if (n === 1) return 'demain';
+    if (n === -1) return 'hier';
+    var d = dayOf(iso);
+    return JOURS[d.getDay()].slice(0, 3) + '. ' + pad2(d.getDate()) + '/' + pad2(d.getMonth() + 1);
+  }
+
+  /** Le jour en toutes lettres : « lundi 16/11/2026 ». */
+  function dayFull(iso) {
+    var d = dayOf(iso);
+    if (!d) return '';
+    return JOURS[d.getDay()] + ' ' + pad2(d.getDate()) + '/' + pad2(d.getMonth() + 1) + '/' + d.getFullYear();
+  }
+
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+
   /** Température du point regardé, avec le ressenti quand il s'en écarte. */
   function tempTag(wp) {
     if (!wp || typeof wp.temp !== 'number') return '';
@@ -1233,7 +1283,9 @@
       var p = pts[frame] || {};
       var f = field.frames[frame] || {};
       var wp = (shown.weather && shown.weather.points && shown.weather.points[frame]) || {};
-      head = '<b>' + esc(f.time || p.time || '') + '</b>' + tempTag(wp);
+      var day = dayTag(shown.weather && shown.weather.for_date);
+      head = (day ? '<span class="slider-day">' + esc(day) + '</span>' : '') +
+        '<b>' + esc(f.time || p.time || '') + '</b>' + tempTag(wp);
 
       // Un départ au-delà de la fenêtre de prévision n'a pas d'image : le dire,
       // plutôt que d'afficher un ciel sec qui serait faux.
@@ -1249,8 +1301,11 @@
       }
     }
 
-    // Le rappel de décalage occupe l'espace libre entre les deux, centré.
-    return head + '<span class="slider-mid">' + shiftChip() + '</span>' + tail;
+    // Le rappel de décalage prend sa propre ligne, centrée, et seulement quand
+    // il y a un décalage : c'est un bouton, pas une lecture, et la ligne porte
+    // déjà le jour, l'heure, la température, l'intensité et la probabilité.
+    var chip = shiftChip();
+    return head + tail + (chip ? '<span class="slider-mid">' + chip + '</span>' : '');
   }
 
   /** Intensité de l'image `i` à l'endroit où se trouve le vélo à ce moment-là. */
@@ -1338,7 +1393,7 @@
     esc: esc, num: num, rainColor: rainColor, rainTier: rainTier, verdictOf: verdictOf,
     verdictCard: verdictCard, profileStrip: profileStrip, windCard: windCard,
     rainChart: rainChart, radarMap: radarMap, mountMaps: mountMaps, routeSummary: routeSummary,
-    creditLine: creditLine,
+    creditLine: creditLine, dayTag: dayTag, dayFull: dayFull, dayNames: dayNames,
     setField: setField, setFrame: setFrame, setOverview: setOverview,
     setBasemap: setBasemap, basemapKeys: basemapKeys, basemapName: basemapName,
     setEngine: setEngine, engineKeys: engineKeys,

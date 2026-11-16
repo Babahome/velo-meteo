@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.19.0 — Les nuages débordent du trajet, et on sait quel jour
+
+- **La couche de pluie couvrait une bande trop étroite.** La marge autour du trajet était
+  un *pourcentage* de sa boîte : sur un trajet en long, cela donnait 2,7 km de chaque côté
+  alors que la carte, en paysage, montre 18 km de large. Les nuages s'arrêtaient au milieu
+  d'une carte vide et une cellule qui approchait par le côté restait invisible.
+  La marge est maintenant **fixée à 6 km de chaque côté**, en kilomètres. Sur le trajet de
+  référence : 20 × 24 km au lieu de 13 × 20, soit **106 % de la largeur visible** contre
+  71 % avant.
+- Grille portée à **11 × 11 = 121 points**, pour garder une maille de 2 km malgré la
+  marge. Le quota n'y voit rien : Open-Meteo compte une requête HTTP comme un appel, quel
+  que soit le nombre de positions. Mesuré à 371 ms à froid, 13 ms en cache.
+- **Le jour du trajet affiché.** Une pastille `demain` à gauche de l'heure, sous le
+  curseur, et seulement quand ce n'est pas aujourd'hui — le silence vaut « aujourd'hui ».
+  Au-delà, le jour et la date : `jeu. 19/11`. Même repère en tête du meilleur créneau, et
+  la ligne de provenance écrit le jour en toutes lettres.
+- Le rappel de décalage passe sur **sa propre ligne**, centrée : la ligne du curseur porte
+  désormais le jour, l'heure, la température, l'intensité et la probabilité, et le lutin
+  « +10 min » venait percuter la température.
+
 ## 0.18.0 — Température, les deux valeurs du point choisi, et l'icône au bon endroit
 
 - **Corrigé : l'icône maison se retrouvait sur le bureau au retour.** Les deux bouts du
