@@ -469,6 +469,61 @@
   var mapSeq = 0;
   var maps = {};   // id -> données de la carte, en attente d'insertion dans le DOM
 
+  // Dernière largeur réellement mesurée sur une carte posée. Elle sert à
+  // demander la grille de pluie *avant* le rendu, puisqu'il faut savoir ce que
+  // la carte montrera pour savoir quoi demander.
+  var lastMapW = 0;
+
+  /**
+   * Largeur qu'aura la carte, en pixels CSS.
+   *
+   * Mesurée sur une carte déjà posée quand il y en a une — c'est le cas à tout
+   * rendu sauf le premier. Sinon déduite de la colonne de contenu : sa largeur
+   * intérieure, moins les deux bordures de la carte qui s'y insère.
+   */
+  function mapWidth() {
+    var posee = d.querySelector('.mapcanvas');
+    if (posee && posee.clientWidth) return (lastMapW = Math.round(posee.clientWidth));
+
+    var host = d.getElementById('view');
+    if (host && host.clientWidth) {
+      var cs = w.getComputedStyle(host);
+      var inner = host.clientWidth -
+        (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0) - 2;
+      if (inner > 80) return Math.round(inner);
+    }
+    return lastMapW;
+  }
+
+  /**
+   * Boîte que la carte montrera au cadrage automatique, en
+   * [sud, ouest, nord, est] — ce qu'il faut demander à Open-Meteo pour que les
+   * nuages couvrent l'écran et non le trajet.
+   *
+   * Ce n'est pas la boîte du trajet, et de très loin : le cadrage s'arrête à un
+   * cran de zoom **entier**, donc la vue déborde d'un facteur un à deux, et la
+   * carte est en paysage là où un trajet domicile-travail est en long. Mesuré
+   * sur le trajet de référence : 7,5 × 11,7 km de trajet dans 34,7 × 21,4 km de
+   * carte. Aucune marge calculée depuis le trajet ne peut deviner ça — seule la
+   * carte le sait, parce qu'elle seule connaît sa largeur en pixels.
+   */
+  function viewBounds(route) {
+    var coords = trackCoords(route || {});
+    var W = mapWidth();
+    if (coords.length < 2 || !W) return null;
+
+    var H = Math.round(W * MAP_RATIO);
+    var z = fitZoom(coords, W, H);
+    var xs = coords.map(function (c) { return lonToWorld(c[1], z); });
+    var ys = coords.map(function (c) { return latToWorld(c[0], z); });
+    var cx = (Math.min.apply(null, xs) + Math.max.apply(null, xs)) / 2;
+    var cy = (Math.min.apply(null, ys) + Math.max.apply(null, ys)) / 2;
+
+    // y croît vers le sud : le bord haut de l'écran est le nord.
+    return [worldToLat(cy + H / 2, z), worldToLon(cx - W / 2, z),
+            worldToLat(cy - H / 2, z), worldToLon(cx + W / 2, z)];
+  }
+
   // Champ de pluie autour du trajet (grille Open-Meteo), renseigné par app.js.
   var field = { available: false, cells: [] };
 
@@ -492,6 +547,15 @@
   function latToWorld(lat, z) {
     var s = Math.max(-0.9999, Math.min(0.9999, Math.sin(lat * Math.PI / 180)));
     return (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * TILE_SIZE * Math.pow(2, z);
+  }
+
+  function worldToLon(x, z) {
+    return (x / (TILE_SIZE * Math.pow(2, z))) * 360 - 180;
+  }
+
+  function worldToLat(y, z) {
+    var n = Math.PI * (1 - 2 * y / (TILE_SIZE * Math.pow(2, z)));
+    return 180 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
   }
 
   /** Zoom le plus serré auquel le trajet tient encore dans W x H pixels. */
@@ -796,6 +860,7 @@
 
     var H = Math.round(W * MAP_RATIO);
     el.style.height = H + 'px';
+    lastMapW = W;
 
     if (engine === 'leaflet') {
       ensureLeaflet(function (ok) {
@@ -955,7 +1020,13 @@
       var cells = currentCells();
 
       if (cells && cells.length) {
-        var metres = field.step_lat * 111320;
+        // La grille est à maille carrée **en mètres**, et Mercator est conforme :
+        // un carré en mètres reste un carré à l'écran. Un seul rayon suffit
+        // donc — on prend le plus grand des deux pas, l'arrondi du nombre de
+        // colonnes laissant quelques pour cent d'écart.
+        var cosLat = Math.cos(cells[0].lat * Math.PI / 180) || 1;
+        var metres = Math.max(field.step_lat * 111320,
+                              (field.step_lon || 0) * 111320 * cosLat);
         cells.forEach(function (c) {
           if (c.rate < 0.05) return;
           L.circle([c.lat, c.lon], {
@@ -1394,6 +1465,7 @@
     verdictCard: verdictCard, profileStrip: profileStrip, windCard: windCard,
     rainChart: rainChart, radarMap: radarMap, mountMaps: mountMaps, routeSummary: routeSummary,
     creditLine: creditLine, dayTag: dayTag, dayFull: dayFull, dayNames: dayNames,
+    viewBounds: viewBounds, mapWidth: mapWidth,
     setField: setField, setFrame: setFrame, setOverview: setOverview,
     setBasemap: setBasemap, basemapKeys: basemapKeys, basemapName: basemapName,
     setEngine: setEngine, engineKeys: engineKeys,

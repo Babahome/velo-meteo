@@ -172,16 +172,28 @@ function normalize(loc) {
   return loc;
 }
 
-async function fetchForecast(points, replay) {
+/**
+ * `rainOnly` : la grille de la carte ne lit que la pluie, alors que le trajet
+ * lui-même a besoin du vent, de la température et de la probabilité.
+ *
+ * Ça n'est pas un détail d'optimisation. Open-Meteo surpondère les requêtes
+ * au-delà de dix variables, et deux modèles doublent le compte : sept variables
+ * font quatorze séries, donc ×1,4 sur un quota déjà multiplié par le nombre de
+ * positions. Mesuré sur 289 positions : 4,8 Mio et 1,8 s en sept variables,
+ * contre 1,7 Mio et 0,6 s pour la pluie seule.
+ */
+async function fetchForecast(points, replay, rainOnly) {
   const params = {
     latitude: points.map(p => p.lat).join(','),
     longitude: points.map(p => p.lon).join(','),
-    minutely_15: 'precipitation,wind_speed_10m,wind_direction_10m,wind_gusts_10m,temperature_2m,apparent_temperature',
-    hourly: 'precipitation_probability',
+    minutely_15: rainOnly
+      ? 'precipitation'
+      : 'precipitation,wind_speed_10m,wind_direction_10m,wind_gusts_10m,temperature_2m,apparent_temperature',
     models: MODELS,
     timezone: 'auto',
     wind_speed_unit: 'kmh'
   };
+  if (!rainOnly) params.hourly = 'precipitation_probability';
 
   // En replay on demande la journée visée plutôt qu'une fenêtre à partir de
   // maintenant ; on prend aussi le lendemain, un trajet du soir pouvant mordre
@@ -408,47 +420,152 @@ async function getWindows(type, stepMin, count, replay, now) {
 /* ---------- champ de pluie autour du trajet ---------- */
 
 /**
- * Grille de points couvrant le trajet et ses environs, à un pas d'environ
- * `stepM` mètres. La grille sert à dessiner les nuages de pluie sur la carte :
- * les 8 points de passage ne disent que ce qui tombe *sur* le trajet, pas ce
- * qui arrive à côté.
+ * Proportions de la carte : hauteur / largeur. Doit rester égal à MAP_RATIO
+ * dans www/js/ui.js — la boîte de repli doit avoir la forme de ce qui sera
+ * affiché, sinon les nuages s'arrêtent avant le bord.
  */
-function buildGrid(points, marginM, maxSide) {
+const MAP_RATIO = 210 / 340;
+
+/**
+ * Boîte de repli, quand le navigateur n'a pas dit ce qu'il affiche : la boîte
+ * du trajet, élargie d'une marge en kilomètres, puis remise à la forme de la
+ * carte.
+ *
+ * La marge est en **mètres** et non en pourcentage de la boîte du trajet : un
+ * trajet nord-sud recevait sinon une marge latérale ridicule, et les nuages se
+ * lisaient comme une bande au milieu d'une carte vide.
+ */
+function routeBox(points, marginM) {
   const lats = points.map(p => p.lat), lons = points.map(p => p.lon);
   const minLat = Math.min(...lats), maxLat = Math.max(...lats);
   const minLon = Math.min(...lons), maxLon = Math.max(...lons);
 
-  // Marge **en kilomètres**, la même des quatre côtés, et non un pourcentage de
-  // la boîte du trajet.
-  //
-  // Avec un pourcentage, un trajet nord-sud recevait une marge latérale
-  // ridicule — 2,7 km de chaque côté sur le trajet de référence — alors que la
-  // carte, en paysage, montrait 18 km de large : les nuages s'arrêtaient en
-  // bande au milieu d'une carte vide. Une averse qui arrive compte autant que
-  // celle qui est déjà dessus, et elle arrive par le côté.
   const midLat = (minLat + maxLat) / 2;
-  const perM = 1 / 111320;
-  const marLat = marginM * perM;
-  const marLon = marginM * perM / (Math.cos(midLat * Math.PI / 180) || 1);
+  const mLat = 111320;
+  const mLon = 111320 * (Math.cos(midLat * Math.PI / 180) || 1);
 
-  const spanLat = (maxLat - minLat) + 2 * marLat;
-  const spanLon = (maxLon - minLon) + 2 * marLon;
+  let south = minLat - marginM / mLat, north = maxLat + marginM / mLat;
+  let west  = minLon - marginM / mLon, east  = maxLon + marginM / mLon;
 
-  // Le côté est toujours au plafond en pratique : la marge seule fait déjà
-  // 12 km, soit bien plus que ce qu'on échantillonnerait au kilomètre.
-  const nLat = Math.max(3, maxSide);
-  const nLon = Math.max(3, maxSide);
+  // Remise à la forme de la carte, qui est en paysage alors qu'un trajet
+  // domicile-travail est souvent en long.
+  const hM = (north - south) * mLat, wM = (east - west) * mLon;
+  if (hM / MAP_RATIO > wM) {
+    const add = (hM / MAP_RATIO - wM) / 2 / mLon;
+    west -= add; east += add;
+  } else {
+    const add = (wM * MAP_RATIO - hM) / 2 / mLat;
+    south -= add; north += add;
+  }
+  return { south: south, north: north, west: west, east: east };
+}
 
+/**
+ * Boîte affichée par la carte, telle que le navigateur la mesure
+ * (`box=sud,ouest,nord,est`).
+ *
+ * C'est lui qui sait, et pas nous : le cadrage automatique choisit un cran de
+ * zoom **entier**, donc la vue déborde largement la boîte du trajet. Sur le
+ * trajet de référence, 7,5 × 11,7 km de trajet s'affichent dans 34,7 × 21,4 km
+ * de carte — aucune marge calculée depuis le trajet ne peut devenir ça.
+ *
+ * L'étendue est tout de même bornée : une carte dézoomée sur la France entière
+ * ne doit pas transformer la grille en damier de 30 km de maille. Au-delà, on
+ * resserre autour du centre regardé plutôt que de refuser la boîte.
+ */
+const BOX_MAX_LAT = 0.5;   // ~55 km du nord au sud
+const BOX_MAX_LON = 1.0;   // ~73 km d'est en ouest à nos latitudes
+
+function cleanBox(v) {
+  if (!v) return null;
+  const n = String(v).split(',').map(Number);
+  if (n.length !== 4 || n.some(x => !isFinite(x))) return null;
+
+  let south = Math.min(n[0], n[2]), north = Math.max(n[0], n[2]);
+  let west  = Math.min(n[1], n[3]), east  = Math.max(n[1], n[3]);
+  if (north > 90 || south < -90 || east > 180 || west < -180) return null;
+  if (north - south < 0.002 || east - west < 0.002) return null;   // boîte dégénérée
+
+  const midLat = (south + north) / 2, midLon = (west + east) / 2;
+  if (north - south > BOX_MAX_LAT) { south = midLat - BOX_MAX_LAT / 2; north = midLat + BOX_MAX_LAT / 2; }
+  if (east - west > BOX_MAX_LON) { west = midLon - BOX_MAX_LON / 2; east = midLon + BOX_MAX_LON / 2; }
+
+  // Arrondi à ~550 m : la largeur du conteneur varie d'un pixel d'un rendu à
+  // l'autre, et chaque boîte distincte est une entrée de cache — donc une
+  // requête de plus — pour une grille identique à l'œil.
+  // L'arrondi se fait vers l'extérieur : la grille doit déborder la carte,
+  // jamais s'arrêter juste avant son bord.
+  const G = 0.005;
+  return {
+    south: Math.floor(south / G) * G, west: Math.floor(west / G) * G,
+    north: Math.ceil(north / G) * G,  east: Math.ceil(east / G) * G
+  };
+}
+
+/** `box=sud,ouest,nord,est` tel qu'on le renvoie et qu'on le met en clé de cache. */
+function boxKey(b) {
+  return b ? [b.south, b.west, b.north, b.east].map(v => v.toFixed(3)).join(',') : '';
+}
+
+/**
+ * Budget de positions pour une requête de champ de pluie.
+ *
+ * Open-Meteo pondère son quota **par position** : weight = nLieux ×
+ * max(1, nJours/14) × max(1, nVariables/10). Mesuré à la main : 867 positions
+ * passent dans la minute à une variable, 1 156 déclenchent un 429 ; à sept
+ * variables sur deux modèles (quatorze séries, donc ×1,4), le 429 arrive dès
+ * 867. Avec 10 000 appels par jour, le budget se compte en dizaines
+ * d'affichages de carte — pas en centaines.
+ *
+ * C'est pour ça qu'on ne répond pas « plus de nuages » par « plus de points » :
+ * on étale le même budget sur la surface réellement affichée, et on ne demande
+ * que la pluie.
+ */
+const GRID_CELLS = 140;
+
+/**
+ * Maille minimale : en dessous, on gaspille des positions sur une grille plus
+ * fine que la donnée elle-même — AROME HD tourne à 1,5 km.
+ */
+const GRID_MIN_STEP_M = 1500;
+
+/**
+ * Grille de points couvrant une boîte, à maille **carrée en mètres**.
+ *
+ * Le carré compte : les taches de pluie sont dessinées en disques d'un seul
+ * rayon, déduit du pas en latitude. Une maille allongée laisse donc des trous
+ * entre les colonnes — ou gaspille de la précision dans un sens.
+ */
+function gridOver(box, budget) {
+  const midLat = (box.south + box.north) / 2;
+  const mLat = 111320;
+  const mLon = 111320 * (Math.cos(midLat * Math.PI / 180) || 1);
+  const hM = (box.north - box.south) * mLat;
+  const wM = (box.east - box.west) * mLon;
+  const n = budget || GRID_CELLS;
+
+  let step = Math.max(GRID_MIN_STEP_M, Math.sqrt((wM * hM) / n));
+  let nLat = 3, nLon = 3;
+  // Les deux « +1 » (une position à chaque bord) peuvent faire dépasser le
+  // budget : on desserre la maille jusqu'à y rentrer.
+  for (let k = 0; k < 40; k++) {
+    nLon = Math.max(3, Math.round(wM / step) + 1);
+    nLat = Math.max(3, Math.round(hM / step) + 1);
+    if (nLon * nLat <= n) break;
+    step *= 1.05;
+  }
+
+  const spanLat = box.north - box.south, spanLon = box.east - box.west;
   const out = [];
   for (let i = 0; i < nLat; i++) {
     for (let j = 0; j < nLon; j++) {
       out.push({
-        lat: +(midLat - spanLat / 2 + (spanLat * i) / (nLat - 1)).toFixed(5),
-        lon: +((minLon + maxLon) / 2 - spanLon / 2 + (spanLon * j) / (nLon - 1)).toFixed(5)
+        lat: +(box.south + (spanLat * i) / (nLat - 1)).toFixed(5),
+        lon: +(box.west + (spanLon * j) / (nLon - 1)).toFixed(5)
       });
     }
   }
-  return { cells: out, stepLat: spanLat / (nLat - 1), stepLon: spanLon / (nLon - 1) };
+  return { cells: out, stepLat: spanLat / (nLat - 1), stepLon: spanLon / (nLon - 1), box: box };
 }
 
 /** Rang du point de passage le plus proche d'une case de la grille. */
@@ -473,15 +590,9 @@ function overview(grid, points, frames) {
   }));
 }
 
-// Marge de 6 km tout autour du trajet : de quoi voir arriver une cellule avant
-// qu'elle ne soit dessus, et de quoi couvrir toute la largeur de la carte, qui
-// est en paysage alors qu'un trajet domicile-travail est souvent en long.
+// Marge de repli autour du trajet, quand le navigateur ne dit pas ce qu'il
+// affiche : de quoi voir arriver une cellule avant qu'elle ne soit dessus.
 const GRID_MARGIN_M = 6000;
-// 11 × 11 = 121 points en **une** requête. Open-Meteo compte une requête HTTP
-// comme un appel, quel que soit le nombre de positions : la pondération porte
-// sur le nombre de variables (au-delà de 10) et sur la durée (au-delà de deux
-// semaines). Le coût en quota est donc le même qu'à 49 points.
-const GRID_MAX_SIDE = 11;
 
 /**
  * Champ de pluie autour du trajet, **à l'heure de passage** — et non à l'heure
@@ -491,9 +602,9 @@ const GRID_MAX_SIDE = 11;
  * contient toutes, et le curseur de la carte peut alors passer de l'une à
  * l'autre sans aller-retour réseau. `cells` reste la vue d'ensemble.
  */
-async function computeField(route, hhmm, shift, replay, now) {
-  const grid = buildGrid(route.points, GRID_MARGIN_M, GRID_MAX_SIDE);
-  const locs = await fetchForecast(grid.cells, replay);
+async function computeField(route, hhmm, shift, replay, now, box) {
+  const grid = gridOver(box || routeBox(route.points, GRID_MARGIN_M));
+  const locs = await fetchForecast(grid.cells, replay, true);
   const offset = locs[0].utc_offset_seconds || 0;
   const dep = replay ? replayDeparture(replay)
             : now    ? nowDeparture(offset, shift)
@@ -527,6 +638,9 @@ async function computeField(route, hhmm, shift, replay, now) {
     frames: frames,
     step_lat: +grid.stepLat.toFixed(5),
     step_lon: +grid.stepLon.toFixed(5),
+    // Renvoyée telle qu'utilisée : c'est la seule façon de vérifier à l'écran
+    // que la grille couvre bien la carte, et non la boîte du trajet.
+    box: boxKey(grid.box),
     at: isoLocal(dep, 15)
   };
 }
@@ -546,15 +660,25 @@ async function computeField(route, hhmm, shift, replay, now) {
 const DEMO_CROSS_MIN = 60;   // durée de la traversée
 const DEMO_PEAK = 14;        // mm/h au cœur, de quoi atteindre le dernier palier
 
+/** Plus grande dimension de la boîte du trajet, en degrés. */
+function spanOf(pts) {
+  const lats = pts.map(p => p.lat), lons = pts.map(p => p.lon);
+  return Math.max(Math.max(...lats) - Math.min(...lats), Math.max(...lons) - Math.min(...lons));
+}
+
 /** Géométrie commune à toutes les vues de l'averse simulée. */
-function demoGeom(route) {
-  const grid = buildGrid(route.points, GRID_MARGIN_M, GRID_MAX_SIDE);
+function demoGeom(route, box) {
+  const grid = gridOver(box || routeBox(route.points, GRID_MARGIN_M));
   const pts = route.points;
   return {
     grid: grid,
     pts: pts,
     mid: pts[Math.floor(pts.length / 2)],
-    spread: Math.max(grid.stepLat, grid.stepLon) * 1.1,
+    // Taille de l'averse adossée au **trajet**, et non à la maille de la
+    // grille : sinon la même averse simulée n'aurait pas la même largeur sur
+    // la carte et dans le graphe, puisque la carte, elle, couvre ce que
+    // l'écran montre et pas ce que le trajet occupe.
+    spread: Math.max(0.01, spanOf(pts) * 0.22),
     // Le jeu fictif n'a pas d'`offset_min` : on le reconstitue au prorata.
     offsetOf: (p, k) => (typeof p.offset_min === 'number' ? p.offset_min
       : Math.round(((route.duration_min || 30) * k) / Math.max(1, pts.length - 1)))
@@ -593,8 +717,8 @@ function demoRateOnRoute(g, p, tMin) {
   return demoRateAt(g, best.lat, best.lon, tMin);
 }
 
-function demoField(route, hhmm, shift) {
-  const g = demoGeom(route);
+function demoField(route, hhmm, shift, box) {
+  const g = demoGeom(route, box);
   const dep = minutesOf(hhmm, shift);
 
   const frames = g.pts.map((p, k) => {
@@ -613,6 +737,7 @@ function demoField(route, hhmm, shift) {
     frames: frames,
     step_lat: +g.grid.stepLat.toFixed(5),
     step_lon: +g.grid.stepLon.toFixed(5),
+    box: boxKey(g.grid.box),
     at: null
   };
 }
@@ -794,23 +919,25 @@ async function compareModels(type, shift) {
 }
 
 /** Champ de pluie mis en cache comme le reste : l'écran d'accueil est bavard. */
-async function getField(type, shift, replay, now) {
+async function getField(type, shift, replay, now, box) {
   const trip = store.getTrip();
   if (!store.isConfigured(trip)) return null;
 
   const key = 'field|' + type + '|' + (shift || 0) + '|' + (replay || '') +
-              '|' + (now ? 'now' + nowBucket() : '') + '|' + (trip.updated_at || '');
+              '|' + (now ? 'now' + nowBucket() : '') + '|' + boxKey(box) +
+              '|' + (trip.updated_at || '');
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.data;
 
   const data = await computeField(trip.routes[type],
-    type === 'evening' ? trip.evening_time : trip.morning_time, shift, replay, now);
+    type === 'evening' ? trip.evening_time : trip.morning_time, shift, replay, now, box);
   cache.set(key, { at: Date.now(), data: data });
   return data;
 }
 
 module.exports = {
-  getTripData, getWindows, safeTripData, invalidate, nextDeparture, cleanShift, cleanReplay, cleanNow,
+  getTripData, getWindows, safeTripData, invalidate, nextDeparture,
+  cleanShift, cleanReplay, cleanNow, cleanBox,
   getField, demoField, demoWeather, demoWindows,
   compareModels, COMPARE_MODELS
 };

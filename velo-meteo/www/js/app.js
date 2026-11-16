@@ -205,15 +205,26 @@
       return get('/api/debug/models?type=' + t + sh() + (log ? '&log=1' : ''),
                  function () { return null; });
     },
-    field: function (t) {
-      return get('/api/radar?type=' + t + sh() + dm(),
+    /**
+     * `box` : la boîte que la carte va afficher, en [sud, ouest, nord, est].
+     * Sans elle, le serveur ne peut que deviner — et il devine la boîte du
+     * trajet, qui est bien plus petite que la carte.
+     */
+    field: function (t, box) {
+      var q = box ? '&box=' + box.map(function (v) { return v.toFixed(4); }).join(',') : '';
+      return get('/api/radar?type=' + t + sh() + dm() + q,
                  function () { return { available: false, cells: [] }; });
     }
   };
 
   /** Recharge les nuages de pluie : ils suivent le trajet affiché et l'heure. */
-  function refreshField(keepFrame) {
-    return api.field(currentTrip()).then(function (f) {
+  /**
+   * `route` sert à calculer la boîte affichée : on la passe explicitement
+   * parce qu'à l'arrivée sur une page, elle n'est pas encore dans `shownRoute`.
+   */
+  function refreshField(keepFrame, route) {
+    var box = UI.viewBounds(route || shownRoute);
+    return api.field(currentTrip(), box).then(function (f) {
       state.field = f || { available: false, cells: [] };
       UI.setField(state.field);
       // Un décalage garde le point regardé : seules les heures ont bougé, pas
@@ -322,7 +333,13 @@
   function pageHome() {
     var t = currentTrip();
     setSwitch(true);
-    return Promise.all([api.route(t), api.weather(t), api.wind(t), refreshField()]).then(function (res) {
+    // Le trajet part seul et en premier : la grille de pluie se demande sur la
+    // boîte que la carte affichera, et cette boîte se déduit du tracé. Un
+    // aller-retour de plus sur du cache local, contre des nuages qui couvrent
+    // l'écran au lieu de s'arrêter en bande au milieu.
+    return api.route(t).then(function (route) {
+      return Promise.all([route, api.weather(t), api.wind(t), refreshField(false, route)]);
+    }).then(function (res) {
       var route = res[0], weather = noteSource(res[1]), wind = res[2];
       shownRoute = route;
       UI.setShown(route, weather);
@@ -379,7 +396,9 @@
    */
   function refreshTime() {
     var t = currentTrip();
-    return Promise.all([api.route(t), api.weather(t), api.wind(t), refreshField(true)])
+    return api.route(t).then(function (route) {
+      return Promise.all([route, api.weather(t), api.wind(t), refreshField(true, route)]);
+    })
       .then(function (res) {
         var route = res[0], weather = noteSource(res[1]), wind = res[2];
         shownRoute = route;
@@ -899,7 +918,7 @@
         '<section class="card">' +
           '<div class="card-pad">' +
             '<div class="card-title">État</div>' +
-            '<div class="small muted">Version 0.19.0 · ' +
+            '<div class="small muted">Version 0.20.0 · ' +
               (state.config.configured ? 'trajet réel configuré' : 'aucun trajet : données fictives') +
               (state.offline ? ' · API injoignable' : '') + '.</div>' +
           '</div>' +

@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.20.0 — Les nuages couvrent la carte, pas le trajet
+
+- **La bande était toujours là.** La correction de 0.19.0 partait d'une mesure fausse : je
+  croyais la carte large de 18 km, elle en montre **34,7**. Le cadrage automatique s'arrête
+  à un cran de zoom **entier**, si bien que 7,5 × 11,7 km de trajet s'affichent dans
+  34,7 × 21,4 km de carte. Une marge calculée depuis le trajet — en pourcentage hier, en
+  kilomètres fixes avant-hier — ne pouvait pas deviner ça.
+  La grille est donc maintenant demandée sur **la boîte que le navigateur affiche**, qu'il
+  envoie lui-même dans le paramètre `box`. Mesuré sur le trajet de référence :
+  **100 % de la largeur et 101 % de la hauteur** de la carte, contre 56 % en largeur en
+  0.19.0. Vérifié sur les deux moteurs de carte, à trois largeurs d'écran.
+- **Correction : le quota Open-Meteo se compte par position, pas par requête.** La note de
+  0.19.0 disait l'inverse. La formule publiée est `poids = nLieux × (nJours / 14) ×
+  (nVariables / 10)` ; vérifié à la main, 867 positions passent dans la minute et 1 156
+  déclenchent un `429`. Le plafond libre de 10 000 appels par jour se compte donc en
+  dizaines d'affichages de carte.
+- **La couche de pluie coûte pourtant moins cher qu'avant.** Le budget de positions est
+  fixe (140) et s'étale sur la surface affichée au lieu de grandir avec elle ; et la
+  grille ne demande plus que `precipitation`, alors qu'elle tirait sept variables sur deux
+  modèles dont elle n'utilisait que la première. 135 unités de quota contre 169, pour une
+  carte trois fois mieux couverte. Sur 289 positions : 1,7 Mio et 0,6 s, contre 4,8 Mio et
+  1,8 s avant.
+- Maille **carrée en mètres** et non en degrés : les taches sont des disques d'un seul
+  rayon, une maille allongée laissait des trous entre les colonnes. 2,5 × 2,7 km sur le
+  trajet de référence, contre 2,0 × 2,4 km pour une carte à moitié vide.
+- Boîte demandée bornée à 55 × 73 km et resserrée autour de son centre au-delà : une carte
+  dézoomée sur la moitié de la France ne doit pas transformer la grille en damier.
+- La taille de l'averse simulée ne dépend plus de la maille de la grille mais du trajet :
+  sinon la même averse n'avait pas la même largeur sur la carte et dans le graphe.
+
 ## 0.19.0 — Les nuages débordent du trajet, et on sait quel jour
 
 - **La couche de pluie couvrait une bande trop étroite.** La marge autour du trajet était

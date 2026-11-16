@@ -235,24 +235,51 @@ zigzags du tracé.
 ### Les nuages de pluie
 
 Par-dessus la carte, les précipitations **à l'heure où tu passes**. Une grille est
-échantillonnée autour du trajet chez Open-Meteo — 11 × 11 cases, soit 121 points en une
-requête — chaque case à l'horaire du point de passage le plus proche, et le résultat est
-dessiné en taches floues.
+échantillonnée chez Open-Meteo, chaque case à l'horaire du point de passage le plus
+proche, et le résultat est dessiné en taches floues.
 
-La grille ajoute **6 km de marge de chaque côté** du trajet, en kilomètres et non en
-pourcentage de la boîte. La nuance compte : avec un pourcentage, un trajet en long
-recevait une marge latérale ridicule — 2,7 km sur le trajet de référence — alors que la
-carte, en paysage, montrait 18 km de large. Les nuages s'arrêtaient en bande au milieu
-d'une carte vide, et une cellule qui approchait par le côté restait invisible jusqu'à être
-dessus.
+La grille couvre **la carte telle qu'elle est affichée**, et non la boîte du trajet. C'est
+le navigateur qui en donne les quatre coins, dans le paramètre `box` de la requête, parce
+que lui seul les connaît : le cadrage automatique s'arrête à un **cran de zoom entier**,
+si bien que la vue déborde le trajet d'un facteur un à deux, et la carte est en paysage là
+où un trajet domicile-travail est souvent en long. Sur le trajet de référence, mesuré au
+pixel : **7,5 × 11,7 km de trajet s'affichent dans 34,7 × 21,4 km de carte**. Aucune marge
+calculée depuis le trajet ne peut deviner ça — c'est pour cela que les tentatives
+précédentes, en pourcentage puis en kilomètres fixes, laissaient toujours une bande de
+nuages au milieu d'une carte vide.
 
-Sur un trajet de 18 km, cela donne **20 × 24 km pour une maille de 2,0 × 2,4 km** — proche
-de la maille native d'AROME (1,5 km), et un peu plus large que ce que la carte affiche.
+Sur ce trajet, la grille fait donc **15 × 9 = 135 points, 34,8 × 21,7 km, maille de
+2,5 × 2,7 km** : 100 % de la largeur et 101 % de la hauteur affichées. La maille est
+**carrée en mètres** et non en degrés — les taches sont des disques d'un seul rayon, une
+maille allongée laisserait des trous entre les colonnes.
 
-> **Le coût en quota est nul.** Open-Meteo compte « une requête HTTP, un appel », quel que
-> soit le nombre de positions ; la pondération porte sur le nombre de variables (au-delà
-> de 10) et sur la durée (au-delà de deux semaines). Passer de 49 à 121 points n'a donc
-> rien changé au compteur. Mesuré : 371 ms pour une requête froide, 13 ms en cache.
+Si le navigateur ne dit rien (appel direct à l'API, boîte illisible), on retombe sur la
+boîte du trajet plus 6 km de marge, remise à la forme de la carte. Et si la boîte demandée
+dépasse 55 × 73 km — une carte dézoomée sur la moitié de la France — elle est resserrée
+autour de son centre : au-delà, la grille deviendrait un damier plus grossier que
+l'information qu'elle porte.
+
+> **Le quota se compte par position, pas par requête.** C'est l'inverse de ce que cette
+> page affirmait jusqu'en 0.20.0, et la correction vaut d'être notée. La formule publiée
+> par Open-Meteo est `poids = nLieux × (nJours / 14) × (nVariables / 10)`, les deux
+> derniers facteurs ne jouant qu'en surcoût. Vérifié à la main : **867 positions passent
+> dans la minute, 1 156 déclenchent un `429`** ; avec sept variables sur deux modèles —
+> quatorze séries, donc ×1,4 — le refus arrive dès 867. Le plafond libre de 10 000 appels
+> par jour se compte donc en **dizaines d'affichages de carte**, pas en centaines.
+>
+> D'où deux choix. Le budget de positions est **fixe (140)** et on l'étale sur la surface
+> affichée au lieu de l'augmenter : couvrir trois fois plus de carte coûte une maille qui
+> passe de 2,0 à 2,5 km, pas trois fois plus de quota. Et la grille ne demande que
+> `precipitation`, là où le trajet lui-même a besoin du vent, de la température et de la
+> probabilité : la requête de la carte est ainsi **moins chère qu'en 0.19.0** (135 unités
+> contre 169) tout en couvrant l'écran entier. Mesuré sur 289 positions : 4,8 Mio et 1,8 s
+> en sept variables, contre 1,7 Mio et 0,6 s pour la pluie seule. En pratique, 300 à
+> 490 ms pour une requête froide, une dizaine de millisecondes en cache.
+
+> **Dézoomer à la main refait apparaître la bande.** La grille est demandée pour le
+> cadrage automatique, celui du bouton ⌖. Si tu dézoomes, la carte montre plus de paysage
+> que de météo — relancer une requête à chaque pincement ferait fondre le quota ci-dessus
+> en quelques minutes. Le bouton de recadrage ramène la vue sur ce qui est couvert.
 
 La couleur suit l'**échelle météo usuelle**, rappelée par la légende sous la carte :
 bruine sous 1 mm/h, modérée à partir de 1, forte à partir de 2,5, très forte au-delà de
@@ -270,7 +297,7 @@ l'heure de départ. Deux échelles de temps sur le même écran se lisent de tra
 > la pluie prévue à 7 h 55, qui peut être nulle pendant qu'il tombe des cordes dehors. La
 > ligne de provenance, sous le graphe, donne la date du trajet affiché, et le curseur
 > l'heure exacte de chaque case. Pour voir ce qui tombe **maintenant**, le bouton
-> **Maintenant** est là pour ça. Reste ensuite la maille : 2,4 km, contre quelques
+> **Maintenant** est là pour ça. Reste ensuite la maille : 2,5 km, contre quelques
 > centaines de mètres pour une image radar — une cellule de quartier peut encore passer
 > entre deux points.
 

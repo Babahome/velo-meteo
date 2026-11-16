@@ -11,7 +11,8 @@
  * de l'app parle de l'heure de passage — deux lectures contradictoires sur le
  * même écran.
  *
- * On échantillonne donc une grille de points autour du trajet et on demande à
+ * On échantillonne donc une grille de points couvrant **la carte telle qu'elle
+ * est affichée** — c'est le navigateur qui en donne la boîte — et on demande à
  * Open-Meteo la pluie de chaque case **à l'heure où le vélo passe à côté**.
  * Le rendu (nuages flous) est fait côté navigateur, dans le calque SVG déjà
  * posé sur les tuiles.
@@ -23,13 +24,17 @@ const store    = require('./store');
 const forecast = require('./forecast');
 const { demoContext } = require('./demo');
 
-// GET /api/radar?type=morning|evening&demo=1
+// GET /api/radar?type=morning|evening&demo=1&box=sud,ouest,nord,est
 router.get('/', async (req, res) => {
   const type = req.query.type === 'evening' ? 'evening' : 'morning';
   const demo = req.query.demo === '1';
   const shift = forecast.cleanShift(req.query.shift);
   const replay = forecast.cleanReplay(req.query.replay);
   const now = forecast.cleanNow(req.query.now);
+  // La boîte vient du navigateur : lui seul sait ce que la carte montre
+  // vraiment, le cadrage automatique s'arrêtant à un cran de zoom entier.
+  // Sans elle, on retombe sur la boîte du trajet plus une marge.
+  const box = forecast.cleanBox(req.query.box);
 
   // Le mode démo doit marcher aussi sans trajet configuré : c'est justement
   // là qu'on regarde le rendu avant d'avoir renseigné quoi que ce soit.
@@ -37,12 +42,12 @@ router.get('/', async (req, res) => {
     const d = demoContext(type, now);
     // Le décalage vaut aussi pour l'averse simulée : sans ça, les horaires du
     // curseur mentiraient dès qu'on touche aux boutons ±10 min.
-    const field = forecast.demoField(d.route, d.hhmm, shift);
+    const field = forecast.demoField(d.route, d.hhmm, shift, box);
     return res.json(Object.assign({ available: true, source: 'demo', error: null }, field));
   }
 
   try {
-    const field = await forecast.getField(type, shift, replay, now);
+    const field = await forecast.getField(type, shift, replay, now, box);
     if (!field) return res.json({ available: false, source: 'mock', error: null, cells: [] });
     res.json(Object.assign({ available: true, source: replay ? 'replay' : 'open-meteo', error: null }, field));
   } catch (e) {
