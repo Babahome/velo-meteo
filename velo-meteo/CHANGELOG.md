@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.20.1 — Le trajet bascule sur demain quand il est fini
+
+- **Corrigé : deux fois une heure par jour, l'app affichait un trajet déjà terminé.**
+  Le passage à l'horaire du lendemain se faisait au bout d'un délai de grâce fixe de
+  deux heures après l'heure de départ, sans rapport avec la durée du trajet. Sur un
+  trajet de 55 minutes, le bouton « Matin » montrait donc encore le départ de 7 h 55
+  **entre 8 h 51 et 9 h 54**, alors qu'on était arrivé depuis longtemps — et rien ne le
+  signalait, la pastille de jour se taisant justement quand c'est aujourd'hui. Même chose
+  le soir, entre 18 h 26 et 19 h 29.
+  La bascule se fait maintenant **quand on serait arrivé** : heure de départ plus durée du
+  trajet. C'est aussi, à la minute près, la règle qu'applique déjà le navigateur pour
+  choisir le sens affiché — les deux ne peuvent plus se contredire.
+- **Le décalage ±10 min ne suit plus le changement de trajet.** « Et si je partais dix
+  minutes plus tard ce matin ? » n'a rien à dire sur le retour du soir. Un +40 min posé le
+  matin déplaçait pourtant encore le trajet du soir.
+
 ## 0.20.0 — Les nuages couvrent la carte, pas le trajet
 
 - **La bande était toujours là.** La correction de 0.19.0 partait d'une mesure fausse : je

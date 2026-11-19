@@ -60,14 +60,32 @@ function isoLocal(d, roundMin) {
  * On reste sur aujourd'hui tant que l'heure de départ n'est pas dépassée de
  * plus de 2 h — au-delà, c'est le trajet de demain qui intéresse.
  */
-function nextDeparture(hhmm, utcOffsetSec, shiftMin) {
+/**
+ * `durationMin` : la durée du trajet, qui dit quand il est **fini**.
+ *
+ * C'est elle qui décide du jour, et non un délai de grâce arbitraire. Avant,
+ * on gardait l'horaire du jour pendant deux heures après l'heure de départ :
+ * sur un trajet de 55 minutes, cela voulait dire qu'entre 8 h 51 et 9 h 54 le
+ * bouton « Matin » affichait un trajet **déjà terminé**, à une heure passée,
+ * sans rien pour le signaler — la pastille de jour se tait justement quand
+ * c'est aujourd'hui. Même chose le soir entre 18 h 26 et 19 h 29. Soit deux
+ * fois une heure par jour où l'heure de départ affichée ne voulait rien dire.
+ *
+ * La bascule se fait donc quand on serait arrivé. C'est aussi, à la minute
+ * près, la règle qu'applique `currentTrip()` côté navigateur pour choisir le
+ * sens affiché : les deux ne peuvent plus se contredire.
+ */
+function nextDeparture(hhmm, utcOffsetSec, shiftMin, durationMin) {
   const parts = String(hhmm || '08:00').split(':');
   const localNow = new Date(Date.now() + utcOffsetSec * 1000);
   const dep = new Date(Date.UTC(
     localNow.getUTCFullYear(), localNow.getUTCMonth(), localNow.getUTCDate(),
     parseInt(parts[0], 10) || 0, parseInt(parts[1], 10) || 0
   ));
-  if (dep.getTime() < localNow.getTime() - 2 * 3600 * 1000) dep.setUTCDate(dep.getUTCDate() + 1);
+  // Durée inconnue (trajet sans itinéraire calculé) : deux heures, l'ancien
+  // comportement, faute de mieux.
+  const over = (durationMin > 0 ? durationMin : 120) * 60000;
+  if (dep.getTime() < localNow.getTime() - over) dep.setUTCDate(dep.getUTCDate() + 1);
 
   // Décalage temporaire demandé depuis la carte : il déplace tout le trajet,
   // sans toucher à l'horaire enregistré dans /data.
@@ -241,7 +259,7 @@ async function compute(type, shift, replay, now) {
   // regarde plus l'horaire enregistré, seulement l'heure qu'il est.
   const dep    = replay ? replayDeparture(replay)
                : now    ? nowDeparture(offset, shift)
-                        : nextDeparture(hhmm, offset, shift);
+                        : nextDeparture(hhmm, offset, shift, route.duration_min);
 
   const points = route.points.map((p, i) => {
     const loc = locs[i];
@@ -368,7 +386,7 @@ async function getWindows(type, stepMin, count, replay, now) {
   const offset = locs[0].utc_offset_seconds || 0;
   const base   = replay ? replayDeparture(replay)
                : now    ? nowDeparture(offset)
-                        : nextDeparture(hhmm, offset);
+                        : nextDeparture(hhmm, offset, 0, route.duration_min);
 
   const step = stepMin || 15;
   const n    = count || 8;
@@ -608,7 +626,7 @@ async function computeField(route, hhmm, shift, replay, now, box) {
   const offset = locs[0].utc_offset_seconds || 0;
   const dep = replay ? replayDeparture(replay)
             : now    ? nowDeparture(offset, shift)
-                     : nextDeparture(hhmm, offset, shift);
+                     : nextDeparture(hhmm, offset, shift, route.duration_min);
 
   // precipitation est un cumul sur 15 min : ×4 pour une intensité en mm/h.
   // null quand le créneau n'existe pas dans la réponse : « pas de donnée » et
@@ -867,7 +885,7 @@ async function compareModels(type, shift) {
     clearTimeout(timer);
   }
 
-  const dep = nextDeparture(hhmm, locs[0].utc_offset_seconds || 0, shift);
+  const dep = nextDeparture(hhmm, locs[0].utc_offset_seconds || 0, shift, route.duration_min);
   const sliceH = (route.duration_min / Math.max(1, route.points.length - 1)) / 60;
 
   const points = route.points.map(p => {

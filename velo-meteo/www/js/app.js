@@ -918,7 +918,7 @@
         '<section class="card">' +
           '<div class="card-pad">' +
             '<div class="card-title">État</div>' +
-            '<div class="small muted">Version 0.20.0 · ' +
+            '<div class="small muted">Version 0.20.1 · ' +
               (state.config.configured ? 'trajet réel configuré' : 'aucun trajet : données fictives') +
               (state.offline ? ' · API injoignable' : '') + '.</div>' +
           '</div>' +
@@ -958,7 +958,18 @@
   d.getElementById('trip-switch').addEventListener('click', function (e) {
     var b = e.target.closest('button[data-trip]');
     if (!b) return;
+    var avant = state.trip;
     state.trip = b.getAttribute('data-trip');
+
+    // Le décalage porte sur **le trajet qu'on regarde** : « et si je partais
+    // dix minutes plus tard ce matin ? » n'a rien à dire sur le retour du soir.
+    // Il le suivait pourtant, et un +40 min posé le matin déplaçait encore le
+    // trajet du soir deux écrans plus loin.
+    if (avant !== state.trip && state.shift) {
+      state.shift = 0;
+      UI.setShift(0);
+    }
+
     // « Maintenant », c'est le présent : sortir d'un rejeu va de soi.
     if (isNow() && state.replay) {
       state.replay = '';

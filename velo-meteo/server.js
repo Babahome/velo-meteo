@@ -57,7 +57,7 @@ app.use('/api', (_req, res) => res.status(404).json({ error: 'Route API inconnue
 
 app.get('/health', (_req, res) => {
   const store = require('./routes/store');
-  res.json({ status: 'ok', version: '0.20.0', configured: store.isConfigured(store.getTrip()) });
+  res.json({ status: 'ok', version: '0.20.1', configured: store.isConfigured(store.getTrip()) });
 });
 
 // --- Front statique --------------------------------------------------------

@@ -190,6 +190,22 @@ du soir ; une fois le soir passé, c'est le matin du lendemain, et la prévision
 demain toute seule. On raisonne sur la fin du trajet et non sur le départ : ouvrir l'app
 en roulant montre le trajet en cours. La bascule manuelle Matin / Soir prime toujours.
 
+**Quel jour, pour un sens donné.** La même règle décide du jour : un trajet reste celui
+d'aujourd'hui tant qu'on n'est pas arrivé, et passe à demain ensuite. Elle s'applique aussi
+bien au sens choisi automatiquement qu'à celui qu'on demande en appuyant sur Matin ou Soir.
+
+> Jusqu'en 0.20.0, le serveur n'appliquait pas cette règle mais un **délai de grâce fixe de
+> deux heures** après l'heure de départ. Sur un trajet de 55 minutes, appuyer sur « Matin »
+> entre 8 h 51 et 9 h 54 affichait donc encore le départ de 7 h 55 — un trajet terminé, à
+> une heure passée, sans rien pour le signaler puisque la pastille de jour se tait quand
+> c'est aujourd'hui. Même chose le soir entre 18 h 26 et 19 h 29. Deux fois une heure par
+> jour où l'heure affichée ne voulait rien dire, et où les créneaux proposaient des départs
+> révolus.
+
+**Le décalage ±10 min appartient au trajet qu'on regarde.** Changer de sens le remet à
+zéro : « et si je partais dix minutes plus tard ce matin ? » n'a rien à dire sur le retour
+du soir.
+
 ### Maintenant
 
 Le bouton du milieu, entre **Matin** et **Soir** : le trajet en partant **à l'instant**,
