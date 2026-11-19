@@ -268,8 +268,8 @@
 
   /** La part « météo » de la ligne de provenance, sous le graphe. */
   function sourceNote(forDate) {
-    if (state.source !== 'live') return '';
-    return 'pluie Open-Meteo' + (forDate ? ' · trajet du ' + UI.dayFull(forDate) : '');
+    if (state.source !== 'live' || !forDate) return '';
+    return 'trajet du ' + UI.dayFull(forDate);
   }
 
   function setupCta() {
@@ -703,8 +703,11 @@
     return '<section class="card">' +
         '<div class="card-pad" style="padding-bottom:4px"><div class="card-title">Fond de carte</div></div>' +
         '<div class="opt-list" role="radiogroup">' + opts + '</div>' +
-        '<div class="card-pad"><div class="note">Les fonds IGN viennent de la Géoplateforme, ' +
-        'sans clé d’API et sous Licence Ouverte Etalab. La carte se déplace au doigt et se zoome ' +
+        // L'attribution ne s'affiche plus sous le graphe : elle a sa place ici,
+        // à côté du choix du fond, où elle se lit une fois pour toutes.
+        '<div class="card-pad"><div class="note">Le fond mondial est © les contributeurs ' +
+        'OpenStreetMap (ODbL) ; les fonds IGN viennent de la Géoplateforme, sans clé d’API et ' +
+        'sous Licence Ouverte Etalab. La carte se déplace au doigt et se zoome ' +
         'au pincement, à la molette ou avec les boutons ; ⌖ la recadre sur le trajet.</div></div>' +
       '</section>' +
 
@@ -918,7 +921,7 @@
         '<section class="card">' +
           '<div class="card-pad">' +
             '<div class="card-title">État</div>' +
-            '<div class="small muted">Version 0.20.1 · ' +
+            '<div class="small muted">Version 0.20.2 · ' +
               (state.config.configured ? 'trajet réel configuré' : 'aucun trajet : données fictives') +
               (state.offline ? ' · API injoignable' : '') + '.</div>' +
           '</div>' +

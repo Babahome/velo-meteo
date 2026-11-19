@@ -349,11 +349,21 @@ n'apporterait rien de vérifiable.
 
 Les trois se suivent sans rien entre eux, dans une même carte : ce sont trois vues du
 même trajet. La légende de l'échelle ouvre le bloc — elle vaut pour la carte comme pour
-les barres du graphe, qui partagent la même rampe — et la **provenance** le ferme, sous le
-graphe : tracé, fond de carte et source météo d'un seul tenant. Elle occupait un coin de
-la carte, où elle masquait le terrain, et un bandeau vert permanent au-dessus de la carte
-annonçait « données réelles » sans prévenir de rien. Seul le bouton de vue d'ensemble
-reste en surimpression, dans le coin où il agit.
+les barres du graphe, qui partagent la même rampe — et le **jour du trajet** le ferme,
+sous le graphe. Seul le bouton de vue d'ensemble reste en surimpression, dans le coin où
+il agit.
+
+Ce pied de bloc portait jusqu'en 0.20.1 toute la provenance — origine du tracé, fond de
+carte, source météo — avant le jour. Sur un téléphone, cela faisait deux lignes de texte
+gris qui ne changeaient jamais, sous le seul écran qu'on regarde tous les matins. Il ne
+reste que ce qui bouge : *trajet du mardi 17/11/2026*. **L'attribution du fond de carte a
+rejoint Réglages → Fond de carte**, à côté du choix auquel elle se rapporte. Quand le jour
+est inconnu, ou pendant un rejeu et l'averse simulée — qui ont déjà leur bandeau —, le
+bloc disparaît au lieu de laisser un blanc.
+
+Disparue aussi, la note sous la légende qui rappelait que l'intensité vient d'un pas de
+15 minutes et la probabilité d'un pas horaire. L'explication reste [plus bas](#les-deux-valeurs-du-point-choisi) ;
+elle n'avait pas à occuper l'écran d'accueil en permanence.
 
 Le haut de l'écran ne garde donc que ce qui **avertit** : averse simulée, rejeu, repli sur
 la maquette, prévisions indisponibles. En direct, il n'y a plus rien à y mettre.

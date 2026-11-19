@@ -272,11 +272,6 @@
           '<span><i style="background:var(--rain-3)"></i>intensité (mm/h)</span>' +
           '<span><i style="background:var(--accent);border-radius:99px"></i>probabilité (%)</span>' +
         '</div>' +
-        // Les deux ne viennent pas du même pas de temps chez Open-Meteo. Sans
-        // ce rappel, décaler de 10 min semble ne bouger qu'une des deux
-        // valeurs — et on croit à un bug d'affichage.
-        '<div class="legend-note">Intensité au pas de 15 min, probabilité au pas horaire : ' +
-          'un décalage de 10 min peut bouger l’une sans l’autre.</div>' +
       close;
   }
 
@@ -1183,10 +1178,16 @@
    * masquait le terrain ; elle se lit aussi bien en pied de bloc, et la carte
    * y gagne la place.
    */
+  /**
+   * La ligne sous le graphe ne porte plus que **le jour du trajet affiché**.
+   *
+   * L'origine du tracé, le fond de carte et la source de pluie en ont été
+   * retirés à la demande : ils ne changent jamais et prenaient deux lignes sur
+   * un écran de téléphone. Ils restent documentés dans DOCS.md.
+   * Vide, le bloc disparaît (`.mapcredit:empty`) au lieu de laisser un blanc.
+   */
   function creditLine(route, note) {
-    var conf = BASEMAPS[basemap] || BASEMAPS.osm;
-    return esc((route.track_ll ? 'Tracé réel' : 'Points de passage') + ' · ' + conf.credit) +
-      (note ? ' · ' + esc(note) : '');
+    return note ? esc(note) : '';
   }
 
   /** « demain » / « lundi 16/11/2026 » : exportés pour les autres pages. */

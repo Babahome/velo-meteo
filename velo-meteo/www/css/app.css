@@ -182,13 +182,13 @@ svg.chart{cursor:ew-resize;touch-action:pan-y}
    par point de passage. Doit rester attrapable au pouce, gants compris. */
 /* Meme retrait lateral que le graphe : c'est ce qui permet d'aligner le
    curseur sur l'axe des abscisses. */
-/* Provenance en pied de bloc : tracé, fond de carte et météo d'un seul tenant,
-   sous le graphe, au lieu d'un coin de la carte et d'un bandeau au-dessus. */
+/* Jour du trajet affiché, en pied de bloc. Vide — rejeu, averse simulée, date
+   inconnue — le bloc disparait au lieu de laisser un blanc sous le graphe. */
 .mapcredit{
   padding:0 12px 11px;font-size:11px;color:var(--text-dim);
   text-align:center;line-height:1.45
 }
-.legend-note{padding:0 12px 2px;font-size:11px;color:var(--text-dim);text-align:center;line-height:1.45}
+.mapcredit:empty{display:none}
 .mapslider{padding:10px 8px 4px;border-top:1px solid var(--line)}
 /* Le curseur se deplace le long du trajet ; les deux boutons qui l'encadrent
    decalent tout le trajet dans le temps.

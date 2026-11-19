@@ -4,7 +4,7 @@ Météo (pluie, vent) sur le trajet vélotaf du matin et du soir.
 
 | Add-on | Version | Port | État |
 |---|---|---|---|
-| [`velo-meteo`](velo-meteo/) | 0.20.1 | 8100 | Le trajet affiché bascule sur demain quand il est fini, pas deux heures après |
+| [`velo-meteo`](velo-meteo/) | 0.20.2 | 8100 | Pied de bloc allégé : le jour du trajet, et rien d’autre |
 
 Renseigne ton domicile, ton lieu de travail et tes horaires dans l'onglet Réglages :
 l'add-on géocode les adresses, calcule ton itinéraire vélo réel et affiche les prévisions

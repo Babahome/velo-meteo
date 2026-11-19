@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.20.2 — Le pied de bloc ne porte plus que le jour
+
+- **Retiré, sous le graphe : la ligne de provenance.** « Tracé réel · © OpenStreetMap ·
+  pluie Open-Meteo » ne changeait jamais et prenait deux lignes de gris sur un téléphone,
+  sous le seul écran qu'on regarde tous les matins. Il ne reste que ce qui bouge :
+  *trajet du mardi 17/11/2026*. Sans jour connu — et pendant un rejeu ou l'averse simulée,
+  qui ont déjà leur bandeau — le bloc disparaît au lieu de laisser un blanc.
+- **L'attribution du fond de carte rejoint Réglages → Fond de carte**, à côté du choix
+  auquel elle se rapporte, plutôt que de disparaître : OpenStreetMap (ODbL) et IGN
+  Géoplateforme (Licence Ouverte Etalab) y sont nommés.
+- **Retiré, sous la légende : le rappel des deux pas de temps.** « Intensité au pas de
+  15 min, probabilité au pas horaire » reste expliqué dans DOCS.md ; il n'avait pas à
+  occuper l'écran d'accueil en permanence.
+
 ## 0.20.1 — Le trajet bascule sur demain quand il est fini
 
 - **Corrigé : deux fois une heure par jour, l'app affichait un trajet déjà terminé.**
